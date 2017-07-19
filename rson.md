@@ -1,0 +1,73 @@
+# RSON: Restructured Object Notation
+
+DRAFT
+
+A Superset of JSON, not a subset of JavaScript.
+
+
+## Basics
+
+- true, false, null, 1.234, "string", [list, ...], {key:value, unordered:dictionary}
+- Ignore any Byte Order Marks, Error on 
+- Hexadecimal 0x..., Binary 0b..., Octal 0c222
+- Hex Floats (C99), +/-Infinity, Nan
+- Leading zeros / Underscores in numbers
+- Trailing commas in lists and dictionaries [1,2,3] / {"a":1,}
+- Sets: {1,2,3}, Ordered Dictionaries ["a":1] (called a table in the spec)
+- 'strings' "strings" and """ multiline strings """ / ''' multiline strings '''
+- # and not // for comments (so that // can be an operator in supersets)
+- bytestrings: b"...."
+
+No:
+
+- Barewords. Just no. It never works out. cf 'No Capes' in the Incredibles. No.
+- // or /* ... */ for comments. We're using #. That's it
+
+## Decorators
+
+- @decorate(args) <Literal>
+
+### Built in decorators:
+
+- @datetime ".... iso/rfc date time"
+- @period ".... iso/rfc period "
+- @base64 "base64 encoded bytestring"
+
+### Reserved Names / No-op decorators
+
+- int / integer / float / double / list / set / date / time / dict / table /
+  bool / complex / string / bytestring
+
+like @bool true
+
+### Encoder dependent
+
+- @path "/over/here" # 
+- @url "....." # 
+
+i.e may just be mapped to strings but optionally used for processing (
+    for example, relative paths)
+
+## Templates
+
+ES6 like template literals
+
+- f'.....' / ` ....` / ``` multiline ```
+- `$a` `${b}` no real nesting inside {}
+
+considering: $foo like literals, i.e [$a, $b,$c], because might as well standardise the misuse 
+
+## Records
+
+- Allow ()'s 
+- Allow a record of 1,2,3,4 (no newlines) 
+- with optional keys: "a", "b":3
+- sugar for @record [[null, "a"], ["b", 3]]
+
+Bonus: CSV like mode, records seperated by newlines.
+
+
+## Decorated JSON Output
+
+- {'type': value} construction akin to avro, using decorator names
+- {"set": [...]} {'base64':'....'}
