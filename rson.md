@@ -4,7 +4,6 @@ DRAFT
 
 A Superset of JSON, not a subset of JavaScript.
 
-
 ## Basics
 
 - true, false, null, 1.234, "string", [list, ...], {key:value, unordered:dictionary}
@@ -26,6 +25,7 @@ No:
 
 - Barewords. Just no. It never works out. cf 'No Capes' in the Incredibles. No.
 - // or /* ... */ for comments. We're using #. That's it
+- JS Compat: JSON, TOML, YAML don't have it 
 
 ## Decorators
 
@@ -42,8 +42,6 @@ No:
 
 - int / integer / float / double / list / set / date / time / dict / table /
   bool / complex / string / bytestring
-
-like @bool true
 
 ### Encoder dependent
 
