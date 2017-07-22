@@ -8,7 +8,7 @@ A Superset of JSON, not a subset of JavaScript.
 ## Basics
 
 - true, false, null, 1.234, "string", [list, ...], {key:value, unordered:dictionary}
-- Ignore any Byte Order Marks, Error on 
+- Ignore any Byte Order Marks
 - Hexadecimal 0x..., Binary 0b..., Octal 0c222
 - Hex Floats (C99), +/-Infinity, Nan
 - Leading zeros / Underscores in numbers
@@ -17,6 +17,10 @@ A Superset of JSON, not a subset of JavaScript.
 - 'strings' "strings" and """ multiline strings """ / ''' multiline strings '''
 - # and not // for comments (so that // can be an operator in supersets)
 - bytestrings: b"...."
+
+Maybe:
+
+- Last Key wins in Ordered/Unordered dictionary
 
 No:
 
@@ -32,6 +36,7 @@ No:
 - @datetime ".... iso/rfc date time"
 - @period ".... iso/rfc period "
 - @base64 "base64 encoded bytestring"
+- @float "NaN" / @float "+Infinity"
 
 ### Reserved Names / No-op decorators
 
