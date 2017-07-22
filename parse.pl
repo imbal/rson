@@ -3,10 +3,11 @@
 parse(X,S) :- phrase(file(S),X),!.
 
 lookahead(X),X --> X.
+lookahead(X,Y,Z),X,Y,Z --> X,Y,Z.
 
 % match_any(Result, Pattern)
 % match(X, `123`) matches 1 2 or 3
-%
+
 match(D,A) --> [D], {member(D, A)},!.
 match_any([D|T],A) --> match(D,A), match_any(T,A).
 match_any([],_) --> [].
@@ -27,8 +28,14 @@ comment_tail --> [].
 
 file(H) --> bom, ws, object(H), ws.
 
-object(O) --> (collection(O); decorated(O); grouped(O); builtin(O); number(O); string(O)),!.
-	
+object(O) --> (collection(O); decorated(O); grouped(O); builtin(O); string(O); number(O)),!.
+
+% decorators
+decorated(D) --> "@",!,identifier(N), arguments(A), ws, object(O), {decorate(N,A,O,D)}.
+
+arguments([]) --> [].
+arguments(A) --> "(", ws, entries0(A), ws, ")".
+
 % collections: [], {}
 
 collection(C) --> (set(C); list(C); dict(C); table(C)),!.
@@ -41,6 +48,20 @@ dict(dict(C)) --> "{",ws, pairs(C), ws, "}".
 list(list(C)) --> "[", ws, items(C), ws, "]".
 table(table(C)) --> "[", ws, pairs(C), ws, "]".
 
+
+% grouped objects: ()'s
+
+% string record: ("a" "b") ~> "ab"
+grouped(O) --> "(", ws, string_record(O), ws, ")". 
+% a single object
+grouped(O) --> "(", ws, object(O), ws, ")".
+% records: mixed list of items and pairs
+grouped(record([])) --> "(", ws, ")".
+grouped(record(O)) --> "(", ws, entries(O), ws, ")".
+
+
+
+% sequences:
 % a,b,c, 
 items([H|T]) --> object(H), item_tail(T).
 items([]) --> [].
@@ -55,19 +76,11 @@ pairs([]) --> [].
 pair_tail(T) --> ws, ",", ws, pairs(T).
 pair_tail([]) --> [].
 
-% grouped objects: ()'s
-
-grouped(O) --> "(", ws, string_record(O), ws, ")". 
-grouped(O) --> "(", ws, object(O), ws, ")".
-
-% records: mixed list of items and pairs
-
-grouped(record([])) --> "(", ws, ")".
-grouped(record(O)) --> "(", ws, entries(O), ws, ")".
-
+% a,b,c:d,e,f:g, ....
 entries([K:V|T]) --> object(K), ws, ":", ws, object(V), ws, ",", ws, entries0(T). 
 entries([H|T]) --> object(H), ws, ",", ws, entries0(T).
 
+% same but also matches empty string
 entries0([K:V|T]) --> object(K), ws, ":", ws, object(V), entry_tail(T). 
 entries0([H|T]) --> object(H),  entry_tail(T).
 entries0([]) --> [].
@@ -75,15 +88,6 @@ entries0([]) --> [].
 entry_tail(T) --> ws, ",", ws, entries0(T).
 entry_tail([]) --> [].
 
-% decorators
-
-decorated(D) --> "@",!,identifier(N), arguments(A), ws, object(O), {decorate(N,A,O,D)}.
-
-arguments([]) --> [].
-arguments(A) --> "(", ws, entries0(A), ws, ")".
-
-% @float "NaN"
-decorate(N,A, O, d(N,A,O)).
 
 % numbers
 
@@ -106,7 +110,7 @@ octal_integer(N) -->
 
 hex_number(O) --> 
     plusorminus(P),
-    "0x", 
+    ("0x";"0X"), 
     match(D0,`0123456789abcdefABCDEF`), 
     match_any(D,`0123456789_abcdefABCDEF`), 
     hex_fractional([P,`0x`,D0,D], O).
@@ -120,12 +124,11 @@ hex_fractional(I,O) --> hex_exponent(I,O).
 hex_fractional(I,O) --> build_number(I,O). 
 
 hex_exponent(I,O) --> match(_,`pP`),
-    plusorminus(P),
+    plusorminus(P), % yes, the exponent of a hex floating point is in decimal.
     match(D0,`0123456789`), 
     match_any(D,`0123456789_`), 
     build_number([I,`p`,P,D0,D],O).
 
-% +/- int [ frac ] [ eE exp ]
 decimal_number(O) --> 
     plusorminus(P),
     match(D0,`0123456789`), 
@@ -149,23 +152,97 @@ exponent(I,O) -->
 exponent(I,O) --> build_number(I,O).
 
 build_number(I, number(N)) --> {flatten(I,L), string_to_list(N, L)}.
-% ( " .." ws " ..." *)
-string_record(_) --> {!,fail}.
 
-string(S) --> string(S, "\"").
-% escapes
-% '' 
-% """ / ''' with multiline
+% strings
 
-string(A,T) --> [T], chars(S,T), {string_to_list(A,S)},!.
-chars([],T) --> [T].
-chars([H|C],T) --> [H], chars(C,T).
+string(S) --> ustring(S); bytestring(S).
 
-% escapes: b n f r t \ / u 
-% escapes: U " '
+ustring(string(S)) --> 
+    (umulti_double(R); umulti_single(R); usingle_double(R); usingle_single(R)),
+    !, {string_to_list(S,R)},!.
 
-% bytestrings, also b"..." and \x...
 
+umulti_double(A) -->("u";"U";[]), "\"\"\"",!, multistring_inside(A,`"`,u), "\"\"\"".
+umulti_single(A)-->("u";"U";[]), "'''", !, multistring_inside(A,`'`,u), "'''".
+
+usingle_double(A)-->("u";"U";[]), "\"", !, string_inside(A,`"`,u), "\"".
+usingle_single(A)-->("u";"U";[]), "'", !, string_inside(A,`'`,u), "'".
+
+%  bytestrings
+
+bytestring(bytes(S)) --> 
+    (bmulti_double(R); bmulti_single(R); bsingle_double(R); bsingle_single(R)),
+    !, {string_to_list(S,R)},!.
+
+bmulti_double(A) -->("b";"B";[]), "\"\"\"",!, multistring_inside(A,`"`,b), "\"\"\"".
+bmulti_single(A)-->("b";"B";[]), "'''", !, multistring_inside(A,`'`,b), "'''".
+bsingle_double(A)-->("b";"B";[]), "\"", !, string_inside(A,`"`,b), "\"".
+bsingle_single(A)-->("b";"B";[]), "'", !, string_inside(A,`'`,b), "'".
+
+% insides
+string_inside([],T,_) --> lookahead(T),!.
+string_inside([],_,_) --> ([13];[10]),!, {fail}.
+string_inside([H|C], T,X) --> lookahead(`\\`),!, [H], string_escape(C,T,X).
+string_inside([H|C],T,X) --> [H], {H >= 32},string_inside(C,T,X).
+
+string_escape(C,T,X) --> ([13, 10]; [13]; [10]), string_inside(C,T,X).
+string_escape([H|C],T,X) --> match(H,`bnfrt/\\"'`), string_inside(C,T,X).
+string_escape([120,D0,D1|C],T,b) --> "x", hexdigit2(D0,D1), string_inside(C,T,b).
+string_escape([117,D0,D1,D2,D3|C],T,u) --> "u", hexdigit4(D0,D1,D2,D3), string_inside(C,T,u).
+string_escape([85,D0,D1,D2,D3,D4,D5,D6,D7|C],T,u) --> "U", hexdigit4(D0,D1,D2,D3), hexdigit4(D4,D5,D6,D7), string_inside(C,T,u).
+
+multistring_inside([H|C],T,X) --> match(H,T), \+lookahead(T),!, multistring_inside(C,T,X).
+multistring_inside([H,H|C],T,X) --> match(H,T), match(H,T), \+lookahead(T),!, multistring_inside(C,T,X).
+multistring_inside([H|C],T,X) --> match(H,T),lookahead(T,T,T),!, multistring_inside(C,T,X).
+multistring_inside([],T,_) --> lookahead(T,T,T),!.
+multistring_inside([H|C], T,X) --> lookahead(`\\`),!, [H], multistring_escape(C,T,X).
+multistring_inside([H|C],T,X) --> [H], {H >= 32},multistring_inside(C,T,X).
+
+multistring_escape(C,T,X) --> ([13, 10]; [13]; [10]), multistring_inside(C,T,X).
+multistring_escape([H|C],T,X) --> match(H,`bnfrt/\\"'`), multistring_inside(C,T,X).
+multistring_escape([120,D0,D1|C],T,b) --> "x", hexdigit2(D0,D1), multistring_inside(C,T,b).
+multistring_escape([117,D0,D1,D2,D3|C],T,u) --> "u", hexdigit4(D0,D1,D2,D3), multistring_inside(C,T,u).
+multistring_escape([85,D0,D1,D2,D3,D4,D5,D6,D7|C],T,u) --> "U", hexdigit4(D0,D1,D2,D3), hexdigit4(D4,D5,D6,D7), multistring_inside(C,T,u).
+
+hexdigit2(D0,D1) -->
+    match(D0,`0123456789abcdefABCDEF`), 
+    match(D1,`0123456789abcdefABCDEF`).
+
+hexdigit4(D0,D1,D2,D3) -->
+    match(D0,`0123456789abcdefABCDEF`), 
+    match(D1,`0123456789abcdefABCDEF`), 
+    match(D2,`0123456789abcdefABCDEF`), 
+    match(D3,`0123456789abcdefABCDEF`). 
+
+
+% a c holdover, kept within ()'s % concat strings ( " ... " ws " ..."  ws " ...." ...)
+%
+string_record(S) --> ustring_record(S); bytestring_record(S).
+
+ustring_record(bytes(S)) --> 
+    (umulti_double(R); umulti_single(R); usingle_double(R); usingle_single(R)),
+    ws, ustring_suffix(T), {flatten([R|T],L), string_to_list(S,L)},!.
+
+ustring_suffix([R|T]) --> 
+    (umulti_double(R); umulti_single(R); usingle_double(R); usingle_single(R)),
+    ws, ustring_suffix(T).
+ustring_suffix([]) --> [].
+
+
+bytestring_record(string(S)) --> 
+    (bmulti_double(R); bmulti_single(R); bsingle_double(R); bsingle_single(R)),
+    ws, bytestring_suffix(T), {flatten([R|T],L), string_to_list(S,L)},!.
+
+bytestring_suffix([R|T]) --> 
+    (bmulti_double(R); bmulti_single(R); bsingle_double(R); bsingle_single(R)),
+    ws, bytestring_suffix(T).
+bytestring_suffix([]) --> [].
+
+% todo: format strings/templates
+
+% todo: @float "NaN", @float "+Infinity", or @float "123.4"  
+decorate(N,[], O, decorate(N,O)).
+decorate(N,A, O, decorate(N,A,O)).
 
 % builtins
 builtin(A) --> identifier(A), {member(A, [true, false, null])}.
@@ -178,18 +255,9 @@ csym_(C) --> [C], {code_type(C, csym)}.
 
 
 %todo
-% bytestrings
 % decorators (reserved names, builtins)
 % datetimes, periods
+% float decorators for some numbers
 % format strings
 % RSV: file is top_objects by newline
-% unicode
-% replace calls to build with calls to decorate 
-
-
-
 % use ``'s not ""s for 'reasons'
-% ?- parse(`(add 1 2 3 4)`,P), eval(P, X).
-% P = [add, 1, 2, 3, 4],
-% X = 10.
-
