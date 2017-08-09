@@ -31,10 +31,10 @@ file(H) --> bom, ws, object(H), ws.
 object(O) --> (collection(O); decorated(O); grouped(O); builtin(O); string(O); number(O)),!.
 
 % decorators
-decorated(D) --> "@",!,identifier(N), arguments(A), ws, object(O), {decorate(N,A,O,D)}.
+decorated(D) --> "@",!,identifier(N), ws, object(O), {decorate(N,A,O,D)}.
 
-arguments([]) --> [].
-arguments(A) --> "(", ws, entries0(A), ws, ")".
+%arguments([]) --> [].
+%arguments(A) --> "(", ws, entries0(A), ws, ")".
 
 % collections: [], {}
 
@@ -55,9 +55,11 @@ table(table(C)) --> "[", ws, pairs(C), ws, "]".
 grouped(O) --> "(", ws, string_record(O), ws, ")". 
 % a single object
 grouped(O) --> "(", ws, object(O), ws, ")".
+
+% ugh: records don't work without barewords, dropped
 % records: mixed list of items and pairs
-grouped(record([])) --> "(", ws, ")".
-grouped(record(O)) --> "(", ws, entries(O), ws, ")".
+%grouped(record([])) --> "(", ws, ")".
+% grouped(record(O)) --> "(", ws, entries(O), ws, ")".
 
 
 
@@ -77,11 +79,11 @@ pair_tail(T) --> ws, ",", ws, pairs(T).
 pair_tail([]) --> [].
 
 % a,b,c:d,e,f:g, ....
-entries([K:V|T]) --> object(K), ws, ":", ws, object(V), ws, ",", ws, entries0(T). 
+entries([K:V|T]) --> identifier(K), ws, ":", ws, object(V), ws, ",", ws, entries0(T). 
 entries([H|T]) --> object(H), ws, ",", ws, entries0(T).
 
 % same but also matches empty string
-entries0([K:V|T]) --> object(K), ws, ":", ws, object(V), entry_tail(T). 
+entries0([K:V|T]) --> identifier(K), ws, ":", ws, object(V), entry_tail(T). 
 entries0([H|T]) --> object(H),  entry_tail(T).
 entries0([]) --> [].
 
@@ -196,7 +198,7 @@ multistring_inside([H,H|C],T,X) --> match(H,T), match(H,T), \+lookahead(T),!, mu
 multistring_inside([H|C],T,X) --> match(H,T),lookahead(T,T,T),!, multistring_inside(C,T,X).
 multistring_inside([],T,_) --> lookahead(T,T,T),!.
 multistring_inside([H|C], T,X) --> lookahead(`\\`),!, [H], multistring_escape(C,T,X).
-multistring_inside([H|C],T,X) --> [H], {H >= 32},multistring_inside(C,T,X).
+multistring_inside([H|C],T,X) --> [H], {member(H,[9,10,13]) ;H >= 32},multistring_inside(C,T,X).
 
 multistring_escape(C,T,X) --> ([13, 10]; [13]; [10]), multistring_inside(C,T,X).
 multistring_escape([H|C],T,X) --> match(H,`bnfrt/\\"'`), multistring_inside(C,T,X).
@@ -240,7 +242,9 @@ bytestring_suffix([]) --> [].
 
 % todo: format strings/templates
 
-% todo: @float "NaN", @float "+Infinity", or @float "123.4"  
+% todo: handling for decorators
+% i.e  @float "NaN", @float "+Infinity", or @float "123.4"  
+
 decorate(N,[], O, decorate(N,O)).
 decorate(N,A, O, decorate(N,A,O)).
 
@@ -253,6 +257,8 @@ csyms([]) --> [].
 csym(C) --> [C], {code_type(C, csymf)}.
 csym_(C) --> [C], {code_type(C, csym)}.
 
+% empty set / empty table @set {} / @table [] 
+
 
 %todo
 % decorators (reserved names, builtins)
@@ -261,3 +267,12 @@ csym_(C) --> [C], {code_type(C, csym)}.
 % format strings
 % RSV: file is top_objects by newline
 % use ``'s not ""s for 'reasons'
+%
+%
+% alt: start from json
+%      add comments
+%      trailing commas
+%      bom
+%      decorators
+%      		decoratos for set, table, list, dict, float, int
+%      sugar for decorated objects
