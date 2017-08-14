@@ -12,7 +12,7 @@ Yes:
 - 1233, 1.234, "string",
 - [list, ...], {key:value, unordered:dictionary}
 
-- # and not // for comments (so that // can be an operator in supersets)
+- use # and not // for comments (so that // can be an operator in supersets)
 
 - Ignore leading Byte Order Marks
 - Leading zeros / Underscores in numbers
