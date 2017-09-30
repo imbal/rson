@@ -14,6 +14,7 @@ Yes:
 
 - # and not // for comments (so that // can be an operator in supersets)
 
+- allow ''s as well as ""s
 - Ignore leading Byte Order Marks
 - Leading zeros / Underscores in numbers
 - Hexadecimal 0x..., Binary 0b..., Octal 0c222
@@ -22,18 +23,20 @@ Yes:
 - Trailing commas in lists and dictionaries [1,2,3] / {"a":1,}
 - Sets: {1,2,3}, Ordered Dictionaries ["a":1] (called a table in the spec)
 
-- 'strings' "strings" and """ multiline strings """ / ''' multiline strings '''
+- 'strings' "strings" and 
 - \UFFFFFFFF escape too, along with json escapes
 
 - bytestrings: b"...." with \xFF escape, along with json escapes (except \u)
 - @decorate <object>:  i.e @datetime "...."
-- parenthesis, and C string hack ("aaa" "aaa") is "aaaaaa"
+- parenthesis, and C string hack ("aaa" "aaa") is "aaaaaa", allows
+  breaking things over multiple lines, 
 
 No:
 
 - Barewords. Just no. It never works out. cf 'No Capes' in the Incredibles. No.
-- // or /* ... */ for comments. We're using #. That's it
+- Js comments: // or /* ... */ for comments. We're using #. That's it
 - JS Compat: JSON, TOML, YAML don't have it 
+- Python style """ multiline strings """ / ''' multiline strings '''
 
 ### Built in decorators:
 

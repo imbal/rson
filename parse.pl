@@ -160,12 +160,13 @@ build_number(I, number(N)) --> {flatten(I,L), string_to_list(N, L)}.
 string(S) --> ustring(S); bytestring(S).
 
 ustring(string(S)) --> 
-    (umulti_double(R); umulti_single(R); usingle_double(R); usingle_single(R)),
+    %(umulti_double(R); umulti_single(R)
+    (usingle_double(R); usingle_single(R)),
     !, {string_to_list(S,R)},!.
 
 
-umulti_double(A) -->("u";"U";[]), "\"\"\"",!, multistring_inside(A,`"`,u), "\"\"\"".
-umulti_single(A)-->("u";"U";[]), "'''", !, multistring_inside(A,`'`,u), "'''".
+%umulti_double(A) -->("u";"U";[]), "\"\"\"",!, multistring_inside(A,`"`,u), "\"\"\"".
+%umulti_single(A)-->("u";"U";[]), "'''", !, multistring_inside(A,`'`,u), "'''".
 
 usingle_double(A)-->("u";"U";[]), "\"", !, string_inside(A,`"`,u), "\"".
 usingle_single(A)-->("u";"U";[]), "'", !, string_inside(A,`'`,u), "'".
@@ -173,11 +174,9 @@ usingle_single(A)-->("u";"U";[]), "'", !, string_inside(A,`'`,u), "'".
 %  bytestrings
 
 bytestring(bytes(S)) --> 
-    (bmulti_double(R); bmulti_single(R); bsingle_double(R); bsingle_single(R)),
+    (bsingle_double(R); bsingle_single(R)),
     !, {string_to_list(S,R)},!.
 
-bmulti_double(A) -->("b";"B";[]), "\"\"\"",!, multistring_inside(A,`"`,b), "\"\"\"".
-bmulti_single(A)-->("b";"B";[]), "'''", !, multistring_inside(A,`'`,b), "'''".
 bsingle_double(A)-->("b";"B";[]), "\"", !, string_inside(A,`"`,b), "\"".
 bsingle_single(A)-->("b";"B";[]), "'", !, string_inside(A,`'`,b), "'".
 
