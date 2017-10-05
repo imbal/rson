@@ -36,6 +36,8 @@ Yes:
 
 - A decorator is a \w+ unicode string, letters or underscore, no punct or space, but non eading numbers, also @foo.bar for namespacing. NFC normalizing should happen too for non ascii identifiers.
 
+
+
 No:
 
 - Barewords. Just no. It never works out. cf 'No Capes' in the Incredibles. No. Decorators are already pushing it
