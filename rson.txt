@@ -34,13 +34,18 @@ Yes:
 - @float "NaN" / @float "+Infinity"
 - bytestrings: @bytestring "1123" or @base64 "...="
 
-- A decorator is a \w+ unicode string, letters or underscore, no punct or space, but non eading numbers, also @foo.bar for namespacing. NFC normalizing should happen too for non ascii identifiers.
+- A decorator is a \w+ unicode string, letters or underscore, no punct
+  or space, but non eading numbers, also @foo.bar for namespacing. 
+  NFC normalizing should happen too for non ascii identifiers.
+
+***
 
 
 
 No:
 
-- Barewords. Just no. It never works out. cf 'No Capes' in the Incredibles. No. Decorators are already pushing it
+- Barewords. Just no. It never works out. 
+  cf 'No Capes' in the Incredibles. No. Decorators are already pushing it
 - Js comments: // or /* ... */ for comments. We're using #. That's it
 - Js Compat: JSON, TOML, YAML don't have it 
 - Python style """ multiline strings """ / ''' multiline strings '''
