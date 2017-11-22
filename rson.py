@@ -16,7 +16,7 @@ flt_b10 = re.compile(r"\.[\d_]+(?:[eE](?:\+|-)?[\d+_])?")
 string_dq = re.compile(r'"(?:[^"\\\n]|\\(?:[\'"\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
 string_sq = re.compile(r"'(?:[^'\\\n]|\\(?:[\"'\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
-identifier = re.compile(r"(?!\d)\w+")
+identifier = re.compile(r"(?!\d)[\w\.]+")
 builtin_names = {'null':None,'true':True,'false':False}
 
 builtin_decorators = set("""
@@ -376,6 +376,7 @@ def main():
     test_parse('@datetime "{}"'.format(obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")), obj)
     obj = timedelta(seconds=666)
     test_parse('@duration {}'.format(obj.total_seconds()), obj)
+    test_parse("@bytestring 'fo\x20o'",b"fo o")
 
 
 

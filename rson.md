@@ -18,8 +18,6 @@ Yes:
 
 - allow ''s as well as ""s
 - \xFF, \UFFFF, \UFFFFFFFF escape too, along with json escapes
-- parenthesis, and C string hack ("aaa" "aaa") is "aaaaaa", allows
-  breaking things over multiple lines, 
 
 - Leading zeros / Underscores in numbers
 - Hexadecimal 0x..., Binary 0b..., Octal 0c222
@@ -46,6 +44,8 @@ No:
 - Python style """ multiline strings """ / ''' multiline strings '''
 - String prefixes u".../b"...", again too python
 - Milisecond: Ugh, use 123.0E-9, and trust a parser not to lose resolution
+- parenthesis, and C string hack ("aaa" "aaa") is "aaaaaa", allows
+  breaking things over multiple lines, 
 
 ### Reserved Names, Standard rules apply
 
