@@ -1,3 +1,45 @@
+r"""
+RSON: Restructured Object Notation
+
+JSON:
+ - true, false, null
+ - "strings" with \" \\\b \f \n \r \t \uFFFF, no control codes
+ - numbers (unary minus, no leading 0's)
+ - [ lists, ]   {"objects":"..."} with only string keys
+ - list or object as root item
+
+RSON:
+ - byte order mark is whitespace
+ - any value as root object
+ - use `#....` as comments
+
+RSON strings:
+ - \UFFFFFFFF \xFF \' escapes
+ - use ''s or ""s
+ - \ at end of line is continuation
+
+RSON numbers:
+ - allow leading zero, underscores (except leading digits)
+ - allow unary minus, plus
+ - binary: 0b1010
+ - octal: 0o777
+ - hex: 0xFF and C99 style hex floats
+
+RSON lists:
+ - allow trailing comma
+
+RSON objects:
+ - allow any value as key
+ - allow objects to be 'decorated', via a named tag
+ - all built in types have names reserved
+
+RSON decorated objects:
+ - `@float "NaN"`
+ - `@base64 "...=="`
+ - `@bytestring "....\xff"`
+
+"""
+
 from collections import namedtuple, OrderedDict, defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -7,38 +49,33 @@ import base64
 
 
 whitespace = re.compile(r"(?:\ |\t|\r?\n|#[^\r\n]*(?:\r?\n|$))+")
-int_b2 = re.compile(r"[-+]?0b[01_]+")
-int_b8 = re.compile(r"[-+]?0o[0-7_]+")
-int_b16 = re.compile(r"[-+]?0x[0-9a-fA-F_]+")
-flt_b16 = re.compile(r"\.[0-9a-fA-F_]+[pP](?:\+|-)?[\d_]+")
+
+int_b2 = re.compile(r"[-+]?0b[01][01_]*")
+int_b8 = re.compile(r"[-+]?0o[0-7][0-7_]*")
 int_b10 = re.compile(r"[-+]?(?!0[box])\d[\d_]*")
+int_b16 = re.compile(r"[-+]?0x[0-9a-fA-F][0-9a-fA-F_]*")
+
 flt_b10 = re.compile(r"\.[\d_]+(?:[eE](?:\+|-)?[\d+_])?")
-string_dq = re.compile(r'"(?:[^"\\\n]|\\(?:[\'"\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
+flt_b16 = re.compile(r"\.[0-9a-fA-F_]+[pP](?:\+|-)?[\d_]+")
+
+string_dq = re.compile(r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
 string_sq = re.compile(r"'(?:[^'\\\n]|\\(?:[\"'\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
+
 decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
+
 builtin_names = {'null':None,'true':True,'false':False}
-
 builtin_decorators = set("""
-        bool
-        int
-        float
-        complex
+        bool int float complex
 
-        string
-        bytestring
-        base64
+        string bytestring base64
 
-        duration
-        datetime
+        duration datetime
 
-        set
-        dict
-        list
-        table
+        set dict list table
 
         object
-    """.split())
+""".split())
 
 class SyntaxErr(Exception):
     def __init__(self, buf, pos):
