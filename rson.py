@@ -12,9 +12,13 @@ RSON:
  - byte order mark is whitespace
  - any value as root object
  - use `#....` as comments
+ - decorators: tags on existing values: `@float "NaN"` `@set [1,2,3,]`
+ - all built in types have names reserved, used for special values
+ - new types through decorators: datetime, period, set, dict
 
 RSON strings:
  - \UFFFFFFFF \xFF \' escapes
+ - \xFF is \u00FF
  - use ''s or ""s
  - \ at end of line is continuation
 
@@ -24,20 +28,42 @@ RSON numbers:
  - binary: 0b1010
  - octal: 0o777
  - hex: 0xFF and C99 style hex floats
+ - decorated strings for special floats: `@float "NaN"`
 
 RSON lists:
- - allow trailing comma
+ - allow trailing commas
 
 RSON objects:
- - allow any value as key
- - allow objects to be 'decorated', via a named tag
- - all built in types have names reserved
+ - like JSON, string only keys
+ - no duplicate keys
+ - insertion order must be preserved
+ - alow 
 
 RSON decorated objects:
- - `@float "NaN"`
- - `@base64 "...=="`
- - `@bytestring "....\xff"`
+ - allow objects to be 'decorated', via a named tag
 
+RSON sets:
+ - `@set [1,2,3]`
+ - always a decorated list
+ - no duplicate items
+
+RSON dicts:
+ - `@dict {"a":1}` or `@dict [["a",1],...]`
+ - keys must be in lexical order
+ - keys must be same type, all string, all number
+
+RSON datetimes/periods:
+ - `@datetime "2017-11-22T23:32:07.100497Z"`
+ - `@duration 60` (in seconds)
+ - UTC must be supported, using `Z` prefix
+ - MAY support RFC 3339
+
+RSON bytestrings:
+ - `@base64 "...=="`
+ - `@bytestring "....\xff"` (cannot have codepoints >255)
+
+RSON complex numbers: (optional)
+ - `@complex [0,1]`
 """
 
 from collections import namedtuple, OrderedDict, defaultdict
@@ -48,7 +74,7 @@ import io
 import base64
 
 
-whitespace = re.compile(r"(?:\ |\t|\r?\n|#[^\r\n]*(?:\r?\n|$))+")
+whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
 int_b2 = re.compile(r"[-+]?0b[01][01_]*")
 int_b8 = re.compile(r"[-+]?0o[0-7][0-7_]*")
@@ -67,14 +93,9 @@ identifier = re.compile(r"(?!\d)[\w\.]+")
 builtin_names = {'null':None,'true':True,'false':False}
 builtin_decorators = set("""
         bool int float complex
-
         string bytestring base64
-
         duration datetime
-
-        set dict list table
-
-        object
+        set list dict object
 """.split())
 
 class SyntaxErr(Exception):
@@ -95,7 +116,7 @@ class Decorated:
         self.value = value
 
 def decorate_object(name, item):
-    if name == 'table':
+    if name == 'object':
         return item
     elif name == 'hash':
         return dict(item)
