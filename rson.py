@@ -281,9 +281,14 @@ def parse_rson(buf, pos):
             else:
                 raise SyntaxErr(buf, pos)
 
-        out = parse_rson_string(name, buf[pos:end])
+        #XXX: all of this:
+        out = eval(buf[pos:end].replace(r'\x',r'\u00'))
 
-        if name == 'datetime':
+        if name == 'bytestring':
+            out = out.encode('latin-1')
+        elif name == 'base64':
+            out= base64.standard_b64decode(out)
+        elif name == 'datetime':
             if out[-1].lower() == 'z':
                 if '.' in out:
                     date, sec = out[:-1].split('.')
@@ -309,6 +314,7 @@ def parse_rson(buf, pos):
             pass
         else:
             raise SemanticErr(name, "has no meaning")
+
         m = int_b16.match(buf, pos)
         if m:
             t = flt_b16.match(buf, m.end())
@@ -364,34 +370,28 @@ def parse_rson(buf, pos):
         if m:
             end = m.end()
             item = buf[pos:end]
-            if item in builtin_names:
+        else:
+            raise SyntaxErr(buf, pos)
 
-                out = builtin_names[item]
-                if name == 'object':
-                    if buf != 'null':
-                        raise SemanticErr('object','must be null or {}')
-                elif name == 'bool':
-                    if buf not in ('true', 'false'): 
-                        raise SemanticErr('bool','must be true or false')
-                elif name in builtin_decorators:
-                    raise SemanticErr(name, "has no meaning")
-                elif name is not None:
-                    out = decorate(name,  out)
-                return out, end
+        if item not in builtin_names:
+            raise SyntaxErr(buf, pos)
+
+        out = builtin_names[item]
+
+        if name == 'object':
+            if buf != 'null':
+                raise SemanticErr('object','must be null or {}')
+        elif name == 'bool':
+            if buf not in ('true', 'false'): 
+                raise SemanticErr('bool','must be true or false')
+        elif name in builtin_decorators:
+            raise SemanticErr(name, "has no meaning")
+        elif name is not None:
+            out = decorate(name,  out)
+
+        return out, end
 
     raise SyntaxErr(buf, pos)
-
-def parse_rson_string(name, buf):
-    # XXX: replace escapes properly.
-    item = eval(buf.replace(r'\x',r'\u00'))
-
-    if name == 'bytestring':
-        #XXX: encode this ahead of time
-        return item.encode('latin-1')
-    elif name == 'base64':
-        #XXX: encode this ahead of time?
-        return base64.standard_b64decode(item)
-    return item
 
 def parse_rson_int(name, buf):
     if buf.startswith('0x'):
