@@ -98,6 +98,16 @@ RSON Reserved Decorators:
  - other uses of  @bool, @int, @float, @complex, @string, @bytestring, @base64,
    @duration, @datetime, @set, @list, @dict, @object is an error
 
+Appendix: Decorated JSON
+
+RSON objects can be encoded as a wrapped JSON, where:
+
+true, false, null, strings, numbers, lists unchanged,
+objects, and all decorated types are encoded as
+{'name':value}, where value can be wrapped, too
+
+e.g. {'object':[['a',1], ['b',2],3]} 
+
 """
 
 from collections import namedtuple, OrderedDict, defaultdict
@@ -106,7 +116,7 @@ from datetime import datetime, timedelta, timezone
 import re
 import io
 import base64
-
+import json
 
 class SyntaxErr(Exception):
     def __init__(self, buf, pos):
@@ -218,6 +228,20 @@ def decorate(name, value):
         return dec(name, value)
     else:
         return Decorated(name, value)
+
+def parse_datetime(v):
+    if v[-1].lower() == 'z':
+        if '.' in v:
+            v, sec = v[:-1].split('.')
+            date = datetime.strptime(v, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            sec = float("0."+sec)
+            return date + timedelta(seconds=sec)
+        else:
+            return datetime.strptime(v, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+
+def format_datetime(obj):
+    obj = obj.astimezone(timezone.utc)
+    return obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 def parse_rson(buf, pos):
     m = whitespace.match(buf,pos)
@@ -415,15 +439,8 @@ def parse_rson(buf, pos):
             out = s.getvalue()
 
         if name == 'datetime':
-            if out[-1].lower() == 'z':
-                if '.' in out:
-                    date, sec = out[:-1].split('.')
-                    date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-                    sec = float("0."+sec)
-                    out = date + timedelta(seconds=sec)
-                else:
-                    out = datetime.strptime(out, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-            else:
+            old, out = out, parse_datetime(out)
+            if not out:
                 raise SemanticErr("invalid datetime: {}".format(out))
         elif name == 'float':
             m = c99_flt.match(out)
@@ -633,8 +650,7 @@ def dump_rson(obj,buf):
             dump_rson(obj[k], buf)
         buf.write('}')
     elif isinstance(obj, datetime):
-        obj = obj.astimezone(timezone.utc)
-        buf.write('@datetime "{}"'.format(obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")))
+        buf.write('@datetime "{}"'.format(format_datetime(obj)))
     elif isinstance(obj, timedelta):
         buf.write('@duration {}'.format(obj.total_seconds()))
     else:
@@ -643,10 +659,102 @@ def dump_rson(obj,buf):
         buf.write('@{} '.format(name))
         dump_rson(value, buf)
 
+
+""" Decorated JSON: An RSON fallback"""
+
+def djson_object_pairs_hook(pairs):
+    ((k,v),) = pairs
+    if k == 'bool':
+        return v
+    if k == 'int':
+        return v
+    if k == 'float':
+        return float.fromhex(v)
+    if k == 'complex':
+        return complex(*v)
+
+    if k == 'string':
+        return v
+    if k == 'base64':
+        return base64.standard_b64decode(v)
+    if k == 'bytestring':
+        return v.encode('latin-1')
+
+    if k == 'set':
+        return set(v)
+    if k == 'list':
+        return v
+    if k == 'dict':
+        return dict(v)
+    if k == 'object':
+        if v is not None:
+            return OrderedDict(v)
+        else:
+            return None
+
+    if k == 'datetime':
+        return parse_datetime(v)
+    if k == 'duration':
+        return timedelta(seconds=v)
+
+    return decorate(k,v)
+
+
+def djson_wrap(obj):
+    if obj is True or obj is False or obj is None:
+        return obj
+    elif isinstance(obj, (str, int)):
+        return obj
+    elif isinstance(obj, float):
+        h = obj.hex()
+        if h.startswith(('0','-')):
+            return obj
+        else:
+            return {'float': h}
+    elif isinstance(obj, bytes):
+        return {'base64': base64.standard_b64encode(obj).decode('ascii')}
+    elif isinstance(obj,(list, tuple)):
+        return [djson_wrap(x) for x in obj]
+    elif isinstance(obj, set):
+        return {'set': [djson_wrap(x) for x in obj]}
+    elif isinstance(obj, OrderedDict):
+        return {'object': [(djson_wrap(x), djson_wrap(y)) for x,y in obj.items() ]}
+    elif isinstance(obj, dict):
+        out = []
+        for x in sorted(obj.keys()):
+            out.append((djson_wrap(x), djson_wrap(obj[x])))
+        return {'dict': out}
+    elif isinstance(obj, datetime):
+        return {'datetime': format_datetime(obj)}
+    elif isinstance(obj, timedelta):
+        return {'duration': obj.total_seconds()}
+    elif isinstance(obj, complex):
+        return {'complex': [obj.real, obj.imag]}
+    else:
+        v= undecorate(obj)
+        if not v:
+            raise SemanticErr('cant wrap {}'.format(obj))
+        name, value = obj
+        return {name: djson_wrap(value)}
+
+def djson_parse(buf):
+    return json.loads(buf, object_pairs_hook=djson_object_pairs_hook)
+
+def djson_dump(obj):
+    obj = djson_wrap(obj)
+    return json.dumps(obj)
+
+def djson_parse_file(fh):
+    return json.load(fh, object_pairs_hook=djson_object_pairs_hook)
+
+def djson_dump_file(obj, fh):
+    obj = djson_wrap(obj)
+    return json.dump(obj, fh)
+
+
 # Tests
 
 def test_parse(buf, obj):
-    print(repr(buf), '->', obj)
     out = parse(buf)
 
     if (obj != obj and out == out) or (obj == obj and obj != out):
@@ -654,8 +762,6 @@ def test_parse(buf, obj):
 
 def test_dump(obj, buf):
     out = dump(obj)
-    print(obj, 'dumps to ',repr(out))
-
     if buf != out:
         raise AssertionError('{} != {}'.format(buf, out))
 
@@ -687,16 +793,12 @@ def test_round(obj):
     buf1 = dump(obj1)
 
     out = parse(buf1)
-    print(obj)
 
     if obj != obj:
         if buf0 != buf1 or obj1 == obj1 or out == out:
             raise AssertionError('{} != {}'.format(obj, out))
     else:
         if buf0 != buf1:
-            print(obj, buf0)
-            print(obj1,buf1)
-            print(out)
             raise AssertionError('buf {} != {}'.format(buf0, buf1))
         if obj != obj1:
             raise AssertionError('buf {} != {}'.format(obj, obj1))
@@ -745,7 +847,7 @@ def main():
     test_dump_err(Decorated('float', 123), BadDecorator)
     test_parse_err('@object "foo"', BadDecorator)
 
-    for x in [
+    tests = [
         0, -1, +1,
         -0.0, +0.0, 1.9,
         True, False, None,
@@ -754,8 +856,19 @@ def main():
         1+2j,float('NaN'),
         datetime.now().astimezone(timezone.utc),
          timedelta(seconds=666),
-    ]:
+    ]
+
+    for x in tests:
         test_round(x)
     
+    for x in tests:
+        out = parse(dump(x))
+        out2 = djson_parse(djson_dump(x))
+        if out !=out:
+            if out2 == out2:
+                raise AssertionError('buf {} != {}'.format(x, out))
+        elif out != out2:
+            raise AssertionError('buf {} != {}'.format(x, out))
+    print('tests passed')
 if __name__ == '__main__':
     main()
