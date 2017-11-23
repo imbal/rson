@@ -159,6 +159,7 @@ byte_escapes = {
     "'":b"'",
     '\\':b'\\',
 }
+
 builtin_names = {'null':None,'true':True,'false':False}
 builtin_values = {None:'null',True:'true',False: 'false'}
 
@@ -314,7 +315,7 @@ def parse_rson(buf, pos):
             s = io.StringIO()
             ascii = False
         elif name in ('base64', 'bytestring'):
-            s = io.BytesIO()
+            s = bytearray()
             ascii = True
         else:
             raise BadDecorator(name, "{} can't be used on strings".format(name))
@@ -338,41 +339,41 @@ def parse_rson(buf, pos):
             hi = buf.find("\\", lo, end)
             if hi == -1:
                 if ascii:
-                    s.write(buf[lo:end-1].encode('ascii'))
+                    s.extend(buf[lo:end-1].encode('ascii'))
                 else:
                     s.write(buf[lo:end-1]) # skip quote
                 break
 
             if ascii:
-                s.write(buf[lo:hi].encode('ascii'))
+                s.extend(buf[lo:hi].encode('ascii'))
             else:
                 s.write(buf[lo:hi])
 
             esc = buf[hi+1]
             if esc in escapes:
                 if ascii:
-                    s.write(byte_escapes[esc])
+                    s.extend(byte_escapes[esc])
                 else:
                     s.write(escapes[esc])
                 lo = hi + 2
             elif esc == 'x':
                 n = buf[hi+2:hi+4]
                 if ascii:
-                    io.write(bytes.fromhex(n))
+                    s.extend(bytes.fromhex(n))
                 else:
-                    io.write(chr(int(n,16)))
+                    s.write(chr(int(n,16)))
                 lo = hi + 4
             elif esc == 'u':
-                if not ascii:
+                if ascii:
                     raise SemanticErr('bytestring cannot have unicode')
                 n = int(buf[hi+2:hi+6],16)
-                io.write(chr(n))
+                s.write(chr(n))
                 lo = hi + 6
             elif esc == 'U':
-                if not ascii:
+                if ascii:
                     raise SemanticErr('bytestring cannot have unicode')
                 n = int(buf[hi+2:hi+10],16)
-                io.write(chr(n))
+                s.write(chr(n))
                 lo = hi + 10
             elif esc == '\n':
                 lo = hi + 2
@@ -381,11 +382,15 @@ def parse_rson(buf, pos):
             else:
                 raise SyntaxErr(buf, hi)
 
-        out = s.getvalue()
+        if ascii:
+            if name =='base64':
+                out = base64.standard_b64decode(s)
+            else:
+                out =  s
+        else:
+            out = s.getvalue()
 
-        if name == 'base64':
-            out= base64.standard_b64decode(out)
-        elif name == 'datetime':
+        if name == 'datetime':
             if out[-1].lower() == 'z':
                 if '.' in out:
                     date, sec = out[:-1].split('.')
@@ -683,9 +688,9 @@ def main():
     test_parse("'\\\\'","\\")
     test_parse(r"'\b\f\r\n\t\"\'\/'","\b\f\r\n\t\"\'/")
     test_parse("''","")
-    test_parse('"\x20"'," ")
-    test_parse('"\uF0F0"',"\uF0F0")
-    test_parse('"\U0001F0F0"',"\U0001F0F0")
+    test_parse(r'"\x20"'," ")
+    test_parse(r'"\uF0F0"',"\uF0F0")
+    test_parse(r'"\U0001F0F0"',"\U0001F0F0")
     test_parse("'\\\\'","\\")
     test_parse("[1]",[1])
     test_parse("[1,]",[1])
