@@ -118,19 +118,23 @@ import io
 import base64
 import json
 
+
 class SyntaxErr(Exception):
     def __init__(self, buf, pos):
         self.buf = buf
         self.pos = pos
         Exception.__init__(self)
 
+
 class SemanticErr(Exception):
     pass
+
 
 class BadDecorator(SemanticErr):
     def __init__(self, name, reason):
         self.name = name
-        SemanticErr.__init__(self,reason)
+        SemanticErr.__init__(self, reason)
+
 
 whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
@@ -142,53 +146,55 @@ int_b16 = re.compile(r"0x[0-9a-fA-F][0-9a-fA-F_]*")
 flt_b10 = re.compile(r"\.[\d_]+")
 exp_b10 = re.compile(r"[eE](?:\+|-)?[\d+_]")
 
-string_dq = re.compile(r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
-string_sq = re.compile(r"'(?:[^'\\\n\x00-\x1F]|\\(?:[\"'\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
+string_dq = re.compile(
+    r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
+string_sq = re.compile(
+    r"'(?:[^'\\\n\x00-\x1F]|\\(?:[\"'\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 
 decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
 
-c99_flt = re.compile(r"NaN|nan|[-+]?Inf|[-+]?inf|[-+]?0x[0-9a-fA-F][0-9a-fA-F]*\.[0-9a-fA-F]+[pP](?:\+|-)?[\d]+")
+c99_flt = re.compile(
+    r"NaN|nan|[-+]?Inf|[-+]?inf|[-+]?0x[0-9a-fA-F][0-9a-fA-F]*\.[0-9a-fA-F]+[pP](?:\+|-)?[\d]+")
 
 str_escapes = {
-    'b':'\b',
-    'n':'\n',
-    'f':'\f',
-    'r':'\r',
-    't':'\t',
-    '/':'/',
-    '"':'"',
-    "'":"'",
-    '\\':'\\',
+    'b': '\b',
+    'n': '\n',
+    'f': '\f',
+    'r': '\r',
+    't': '\t',
+    '/': '/',
+    '"': '"',
+    "'": "'",
+    '\\': '\\',
 }
 
 byte_escapes = {
-    'b':b'\b',
-    'n':b'\n',
-    'f':b'\f',
-    'r':b'\r',
-    't':b'\t',
-    '/':b'/',
-    '"':b'"',
-    "'":b"'",
-    '\\':b'\\',
+    'b': b'\b',
+    'n': b'\n',
+    'f': b'\f',
+    'r': b'\r',
+    't': b'\t',
+    '/': b'/',
+    '"': b'"',
+    "'": b"'",
+    '\\': b'\\',
 }
 
 escaped = {
-    '\b':'\\b',
-    '\n':'\\n',
-    '\f':'\\f',
-    '\r':'\\r',
-    '\t':'\\t',
-    '"':'\\"',
-    "'":"\\'",
-    '\\':'\\\\',
+    '\b': '\\b',
+    '\n': '\\n',
+    '\f': '\\f',
+    '\r': '\\r',
+    '\t': '\\t',
+    '"': '\\"',
+    "'": "\\'",
+    '\\': '\\\\',
 }
 
 
-
-builtin_names = {'null':None,'true':True,'false':False}
-builtin_values = {None:'null',True:'true',False: 'false'}
+builtin_names = {'null': None, 'true': True, 'false': False}
+builtin_values = {None: 'null', True: 'true', False: 'false'}
 
 builtin_decorators = set("""
         bool int float complex
@@ -197,28 +203,35 @@ builtin_decorators = set("""
         set list dict object
 """.split())
 
-registered_decorators = OrderedDict() # names -> Classes (take name, value as args)
-registered_classes = OrderedDict() # classes -> undecorators (get name, value)
+# names -> Classes (take name, value as args)
+registered_decorators = OrderedDict()
+registered_classes = OrderedDict()  # classes -> undecorators (get name, value)
+
 
 class Decorated:
     def __init__(self, name, value):
         self.name = name
         self.value = value
 
+
 registered_classes[Decorated] = lambda obj: (obj.name, obj.value)
 
+
 def undecorate(obj):
-   if obj.__class__ in registered_classes:
+    if obj.__class__ in registered_classes:
         und = registered_classes[obj.__class__]
         name, value = und(obj)
-   else:
-       raise SemanticErr("Can't undecorate {}: unknown class {}".format(obj, obj.__class__))
+    else:
+        raise SemanticErr(
+            "Can't undecorate {}: unknown class {}".format(obj, obj.__class__))
 
-   if name not in builtin_decorators:
-       return name, value
-   else:
-       raise BadDecorator(name,"Can't undecorate {}, as {} is reserved name".format(obj, name))
-        
+    if name not in builtin_decorators:
+        return name, value
+    else:
+        raise BadDecorator(
+            name, "Can't undecorate {}, as {} is reserved name".format(obj, name))
+
+
 def decorate(name, value):
     if name in builtin_decorators:
         raise BadDecorator(name, "{} is reserved".format(name))
@@ -229,22 +242,26 @@ def decorate(name, value):
     else:
         return Decorated(name, value)
 
+
 def parse_datetime(v):
     if v[-1].lower() == 'z':
         if '.' in v:
             v, sec = v[:-1].split('.')
-            date = datetime.strptime(v, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-            sec = float("0."+sec)
+            date = datetime.strptime(
+                v, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            sec = float("0." + sec)
             return date + timedelta(seconds=sec)
         else:
             return datetime.strptime(v, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+
 
 def format_datetime(obj):
     obj = obj.astimezone(timezone.utc)
     return obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
+
 def parse_rson(buf, pos):
-    m = whitespace.match(buf,pos)
+    m = whitespace.match(buf, pos)
     if m:
         pos = m.end()
 
@@ -254,7 +271,7 @@ def parse_rson(buf, pos):
         m = decorator_name.match(buf, pos)
         if m:
             pos = m.end()
-            name = buf[m.start()+1:pos].rstrip()
+            name = buf[m.start() + 1:pos].rstrip()
         else:
             raise SyntaxErr(buf, pos)
 
@@ -269,10 +286,11 @@ def parse_rson(buf, pos):
         elif name == 'dict':
             out = dict()
         else:
-            raise BadDecorator(name, "{} can't be used on objects".format(name))
+            raise BadDecorator(
+                name, "{} can't be used on objects".format(name))
 
-        pos+=1
-        m = whitespace.match(buf,pos)
+        pos += 1
+        m = whitespace.match(buf, pos)
         if m:
             pos = m.end()
 
@@ -282,14 +300,14 @@ def parse_rson(buf, pos):
             if key in out:
                 raise SemanticErr('duplicate key: {}, {}'.format(key, out))
 
-            m = whitespace.match(buf,pos)
+            m = whitespace.match(buf, pos)
             if m:
                 pos = m.end()
 
             peek = buf[pos]
             if peek == ':':
-                pos +=1
-                m = whitespace.match(buf,pos)
+                pos += 1
+                m = whitespace.match(buf, pos)
                 if m:
                     pos = m.end()
             else:
@@ -297,19 +315,19 @@ def parse_rson(buf, pos):
 
             item, pos = parse_rson(buf, pos)
 
-            out[key]=item
+            out[key] = item
 
             peek = buf[pos]
             if peek == ',':
-                pos +=1
-                m = whitespace.match(buf,pos)
+                pos += 1
+                m = whitespace.match(buf, pos)
                 if m:
                     pos = m.end()
             elif peek != '}':
                 raise SyntaxErr(buf, pos)
         if name not in (None, 'object', 'dict'):
             out = decorate(name,  out)
-        return out, pos+1
+        return out, pos + 1
 
     elif peek == '[':
         if name in (None, 'list', 'complex') or name not in builtin_decorators:
@@ -319,8 +337,8 @@ def parse_rson(buf, pos):
         else:
             raise BadDecorator(name, "{} can't be used on lists".format(name))
 
-        pos+=1
-        m = whitespace.match(buf,pos)
+        pos += 1
+        m = whitespace.match(buf, pos)
         if m:
             pos = m.end()
         while buf[pos] != ']':
@@ -333,14 +351,14 @@ def parse_rson(buf, pos):
             else:
                 out.append(item)
 
-            m = whitespace.match(buf,pos)
+            m = whitespace.match(buf, pos)
             if m:
                 pos = m.end()
 
             peek = buf[pos]
             if peek == ',':
-                pos +=1
-                m = whitespace.match(buf,pos)
+                pos += 1
+                m = whitespace.match(buf, pos)
                 if m:
                     pos = m.end()
             elif peek != ']':
@@ -349,9 +367,9 @@ def parse_rson(buf, pos):
             out = complex(*out)
         elif name not in (None, 'list', 'set'):
             out = decorate(name,  out)
-        return out, pos+1
+        return out, pos + 1
 
-    elif peek == "'" or peek =='"':
+    elif peek == "'" or peek == '"':
         if name in (None, 'string', 'float', 'datetime') or name not in builtin_decorators:
             s = io.StringIO()
             ascii = False
@@ -359,7 +377,8 @@ def parse_rson(buf, pos):
             s = bytearray()
             ascii = True
         else:
-            raise BadDecorator(name, "{} can't be used on strings".format(name))
+            raise BadDecorator(
+                name, "{} can't be used on strings".format(name))
 
         if peek == "'":
             m = string_sq.match(buf, pos)
@@ -374,15 +393,14 @@ def parse_rson(buf, pos):
             else:
                 raise SyntaxErr(buf, pos)
 
-
-        lo = pos + 1 # skip quotes
-        while lo < end-1:
+        lo = pos + 1  # skip quotes
+        while lo < end - 1:
             hi = buf.find("\\", lo, end)
             if hi == -1:
                 if ascii:
-                    s.extend(buf[lo:end-1].encode('ascii'))
+                    s.extend(buf[lo:end - 1].encode('ascii'))
                 else:
-                    s.write(buf[lo:end-1]) # skip quote
+                    s.write(buf[lo:end - 1])  # skip quote
                 break
 
             if ascii:
@@ -390,7 +408,7 @@ def parse_rson(buf, pos):
             else:
                 s.write(buf[lo:hi])
 
-            esc = buf[hi+1]
+            esc = buf[hi + 1]
             if esc in str_escapes:
                 if ascii:
                     s.extend(byte_escapes[esc])
@@ -398,14 +416,14 @@ def parse_rson(buf, pos):
                     s.write(str_escapes[esc])
                 lo = hi + 2
             elif esc == 'x':
-                n = int(buf[hi+2:hi+4],16)
+                n = int(buf[hi + 2:hi + 4], 16)
                 if ascii:
                     s.append(n)
                 else:
                     s.write(chr(n))
                 lo = hi + 4
             elif esc == 'u':
-                n = int(buf[hi+2:hi+6],16)
+                n = int(buf[hi + 2:hi + 6], 16)
                 if ascii:
                     if n > 0xFF:
                         raise SemanticErr('bytestring cannot have unicode')
@@ -415,7 +433,7 @@ def parse_rson(buf, pos):
                     s.write(chr(n))
                 lo = hi + 6
             elif esc == 'U':
-                n = int(buf[hi+2:hi+10],16)
+                n = int(buf[hi + 2:hi + 10], 16)
                 if ascii:
                     if n > 0xFF:
                         raise SemanticErr('bytestring cannot have unicode')
@@ -426,7 +444,7 @@ def parse_rson(buf, pos):
                 lo = hi + 10
             elif esc == '\n':
                 lo = hi + 2
-            elif (buf[hi+1:hi+3]=='\r\n'):
+            elif (buf[hi + 1:hi + 3] == '\r\n'):
                 lo = hi + 3
             else:
                 raise SyntaxErr(buf, hi)
@@ -434,7 +452,7 @@ def parse_rson(buf, pos):
         if name == 'base64':
             out = base64.standard_b64decode(s)
         elif name == 'bytestring':
-            out =  s
+            out = s
         else:
             out = s.getvalue()
 
@@ -457,7 +475,8 @@ def parse_rson(buf, pos):
         if name in (None, 'int', 'float', 'duration') or name not in builtin_decorators:
             pass
         else:
-            raise BadDecorator(name, "{} can't be used on numbers".format(name))
+            raise BadDecorator(
+                name, "{} can't be used on numbers".format(name))
 
         flt_end = None
         exp_end = None
@@ -467,40 +486,40 @@ def parse_rson(buf, pos):
         if buf[pos] in "+-":
             if buf[pos] == "-":
                 sign = -1
-            pos +=1
-        peek = buf[pos:pos+2]
+            pos += 1
+        peek = buf[pos:pos + 2]
 
-        if peek in ('0x','0o','0b'):
+        if peek in ('0x', '0o', '0b'):
             if peek == '0x':
                 base = 16
                 m = int_b16.match(buf, pos)
                 if m:
                     end = m.end()
                 else:
-                    raise SyntaxErr(buf,pos)
+                    raise SyntaxErr(buf, pos)
             elif peek == '0o':
                 base = 8
                 m = int_b8.match(buf, pos)
                 if m:
                     end = m.end()
                 else:
-                    raise SyntaxErr(buf,pos)
+                    raise SyntaxErr(buf, pos)
             elif peek == '0b':
                 base = 2
                 m = int_b2.match(buf, pos)
                 if m:
                     end = m.end()
                 else:
-                    raise SyntaxErr(buf,pos)
+                    raise SyntaxErr(buf, pos)
 
-            out = sign * int(buf[pos+2:end].replace('_',''),base)
+            out = sign * int(buf[pos + 2:end].replace('_', ''), base)
         else:
             m = int_b10.match(buf, pos)
             if m:
                 int_end = m.end()
                 end = int_end
             else:
-                raise SyntaxErr(buf,pos)
+                raise SyntaxErr(buf, pos)
 
             t = flt_b10.match(buf, end)
             if t:
@@ -513,9 +532,9 @@ def parse_rson(buf, pos):
                 end = exp_end
 
             if flt_end or exp_end:
-                out = sign * float(buf[pos:end].replace('_',''))
+                out = sign * float(buf[pos:end].replace('_', ''))
             else:
-                out = sign * int(buf[pos:end].replace('_',''),10)
+                out = sign * int(buf[pos:end].replace('_', ''), 10)
 
         if name == 'duration':
             out = timedelta(seconds=out)
@@ -545,12 +564,13 @@ def parse_rson(buf, pos):
 
         if name == 'object':
             if buf != 'null':
-                raise BadDecorator('object','must be null or {}')
+                raise BadDecorator('object', 'must be null or {}')
         elif name == 'bool':
-            if buf not in ('true', 'false'): 
-                raise BadDecorator('bool','must be true or false')
+            if buf not in ('true', 'false'):
+                raise BadDecorator('bool', 'must be true or false')
         elif name in builtin_decorators:
-            raise BadDecorator(name, "{} can't be used on builtins".format(name))
+            raise BadDecorator(
+                name, "{} can't be used on builtins".format(name))
         elif name is not None:
             out = decorate(name,  out)
 
@@ -558,19 +578,21 @@ def parse_rson(buf, pos):
 
     raise SyntaxErr(buf, pos)
 
+
 def parse(buf):
     obj, pos = parse_rson(buf, 0)
 
-    m = whitespace.match(buf,pos)
+    m = whitespace.match(buf, pos)
     if m:
         pos = m.end()
-        m = whitespace.match(buf,pos)
+        m = whitespace.match(buf, pos)
 
     if pos != len(buf):
-        print('trail',buf[pos:])
+        print('trail', buf[pos:])
         raise SyntaxErr(buf, pos)
 
     return obj
+
 
 def dump(obj):
     buf = io.StringIO('')
@@ -578,7 +600,7 @@ def dump(obj):
     return buf.getvalue()
 
 
-def dump_rson(obj,buf):
+def dump_rson(obj, buf):
     if obj is True or obj is False or obj is None:
         buf.write(builtin_values[obj])
     elif isinstance(obj, str):
@@ -595,17 +617,17 @@ def dump_rson(obj,buf):
         buf.write(str(obj))
     elif isinstance(obj, float):
         hex = obj.hex()
-        if hex.startswith(('0','-')):
+        if hex.startswith(('0', '-')):
             buf.write(str(obj))
         else:
-            buf.write('@float "{}"'.format(hex)) 
+            buf.write('@float "{}"'.format(hex))
     elif isinstance(obj, complex):
         buf.write("@complex [{}, {}]".format(obj.real, obj.imag))
     elif isinstance(obj, (bytes, bytearray)):
         buf.write('@base64 "')
         buf.write(base64.standard_b64encode(obj).decode('ascii'))
         buf.write('"')
-    elif isinstance(obj,(list, tuple)):
+    elif isinstance(obj, (list, tuple)):
         buf.write('[')
         first = True
         for x in obj:
@@ -628,7 +650,7 @@ def dump_rson(obj,buf):
     elif isinstance(obj, OrderedDict):
         buf.write('{')
         first = True
-        for k,v in obj.items():
+        for k, v in obj.items():
             if first:
                 first = False
             else:
@@ -662,8 +684,9 @@ def dump_rson(obj,buf):
 
 """ Decorated JSON: An RSON fallback"""
 
+
 def djson_object_pairs_hook(pairs):
-    ((k,v),) = pairs
+    ((k, v),) = pairs
     if k == 'bool':
         return v
     if k == 'int':
@@ -697,7 +720,7 @@ def djson_object_pairs_hook(pairs):
     if k == 'duration':
         return timedelta(seconds=v)
 
-    return decorate(k,v)
+    return decorate(k, v)
 
 
 def djson_wrap(obj):
@@ -707,18 +730,18 @@ def djson_wrap(obj):
         return obj
     elif isinstance(obj, float):
         h = obj.hex()
-        if h.startswith(('0','-')):
+        if h.startswith(('0', '-')):
             return obj
         else:
             return {'float': h}
     elif isinstance(obj, bytes):
         return {'base64': base64.standard_b64encode(obj).decode('ascii')}
-    elif isinstance(obj,(list, tuple)):
+    elif isinstance(obj, (list, tuple)):
         return [djson_wrap(x) for x in obj]
     elif isinstance(obj, set):
         return {'set': [djson_wrap(x) for x in obj]}
     elif isinstance(obj, OrderedDict):
-        return {'object': [(djson_wrap(x), djson_wrap(y)) for x,y in obj.items() ]}
+        return {'object': [(djson_wrap(x), djson_wrap(y)) for x, y in obj.items()]}
     elif isinstance(obj, dict):
         out = []
         for x in sorted(obj.keys()):
@@ -731,21 +754,25 @@ def djson_wrap(obj):
     elif isinstance(obj, complex):
         return {'complex': [obj.real, obj.imag]}
     else:
-        v= undecorate(obj)
+        v = undecorate(obj)
         if not v:
             raise SemanticErr('cant wrap {}'.format(obj))
         name, value = obj
         return {name: djson_wrap(value)}
 
+
 def djson_parse(buf):
     return json.loads(buf, object_pairs_hook=djson_object_pairs_hook)
+
 
 def djson_dump(obj):
     obj = djson_wrap(obj)
     return json.dumps(obj)
 
+
 def djson_parse_file(fh):
     return json.load(fh, object_pairs_hook=djson_object_pairs_hook)
+
 
 def djson_dump_file(obj, fh):
     obj = djson_wrap(obj)
@@ -760,10 +787,12 @@ def test_parse(buf, obj):
     if (obj != obj and out == out) or (obj == obj and obj != out):
         raise AssertionError('{} != {}'.format(obj, out))
 
+
 def test_dump(obj, buf):
     out = dump(obj)
     if buf != out:
         raise AssertionError('{} != {}'.format(buf, out))
+
 
 def test_parse_err(buf, exc):
     try:
@@ -772,9 +801,12 @@ def test_parse_err(buf, exc):
         if isinstance(e, exc):
             return
         else:
-            raise AssertionError('{} did not cause {}, but '.format(buf,exc,e))
+            raise AssertionError(
+                '{} did not cause {}, but '.format(buf, exc, e))
     else:
-        raise AssertionError('{} did not cause {}, parsed:{}'.format(buf,exc, obj))
+        raise AssertionError(
+            '{} did not cause {}, parsed:{}'.format(buf, exc, obj))
+
 
 def test_dump_err(obj, exc):
     try:
@@ -783,9 +815,12 @@ def test_dump_err(obj, exc):
         if isinstance(e, exc):
             return
         else:
-            raise AssertionError('{} did not cause {}, but '.format(obj,exc,e))
+            raise AssertionError(
+                '{} did not cause {}, but '.format(obj, exc, e))
     else:
-        raise AssertionError('{} did not cause {}, dumping: {}'.format(obj,exc, buf))
+        raise AssertionError(
+            '{} did not cause {}, dumping: {}'.format(obj, exc, buf))
+
 
 def test_round(obj):
     buf0 = dump(obj)
@@ -804,46 +839,49 @@ def test_round(obj):
             raise AssertionError('buf {} != {}'.format(obj, obj1))
         if obj != out:
             raise AssertionError('buf {} != {}'.format(obj, out))
-        
+
+
 def main():
-    test_parse("0",0)
-    test_parse("0x0_1_2_3",0x123)
-    test_parse("0o0_1_2_3",0o123)
-    test_parse("0b0_1_0_1",5)
-    test_parse("0 #comment",0)
-    test_parse("0.0",0.0)
-    test_parse("-0.0",-0.0)
-    test_parse("'foo'","foo")
-    test_parse(r"'fo\no'","fo\no")
-    test_parse("'\\\\'","\\")
-    test_parse(r"'\b\f\r\n\t\"\'\/'","\b\f\r\n\t\"\'/")
-    test_parse("''","")
-    test_parse(r'"\x20"'," ")
-    test_parse(r'"\uF0F0"',"\uF0F0")
-    test_parse(r'"\U0001F0F0"',"\U0001F0F0")
-    test_parse("'\\\\'","\\")
-    test_parse("[1]",[1])
-    test_parse("[1,]",[1])
-    test_parse("[]",[])
-    test_parse("[1,2,3,4,4]",[1,2,3,4,4])
-    test_parse("{'a':1,'b':2}",dict(a=1,b=2))
-    test_parse("@set [1,2,3,4]",set([1,2,3,4]))
-    test_parse("{'a':1,'b':2}",dict(a=1,b=2))
-    test_parse("@complex [1,2]",1+2j)
-    test_parse("@bytestring 'foo'",b"foo")
-    test_parse("@base64 '{}'".format(base64.standard_b64encode(b'foo').decode('ascii')),b"foo")
-    test_parse("@float 'NaN'",float('NaN'))
-    test_parse("@float '-inf'",float('-Inf'))
+    test_parse("0", 0)
+    test_parse("0x0_1_2_3", 0x123)
+    test_parse("0o0_1_2_3", 0o123)
+    test_parse("0b0_1_0_1", 5)
+    test_parse("0 #comment", 0)
+    test_parse("0.0", 0.0)
+    test_parse("-0.0", -0.0)
+    test_parse("'foo'", "foo")
+    test_parse(r"'fo\no'", "fo\no")
+    test_parse("'\\\\'", "\\")
+    test_parse(r"'\b\f\r\n\t\"\'\/'", "\b\f\r\n\t\"\'/")
+    test_parse("''", "")
+    test_parse(r'"\x20"', " ")
+    test_parse(r'"\uF0F0"', "\uF0F0")
+    test_parse(r'"\U0001F0F0"', "\U0001F0F0")
+    test_parse("'\\\\'", "\\")
+    test_parse("[1]", [1])
+    test_parse("[1,]", [1])
+    test_parse("[]", [])
+    test_parse("[1,2,3,4,4]", [1, 2, 3, 4, 4])
+    test_parse("{'a':1,'b':2}", dict(a=1, b=2))
+    test_parse("@set [1,2,3,4]", set([1, 2, 3, 4]))
+    test_parse("{'a':1,'b':2}", dict(a=1, b=2))
+    test_parse("@complex [1,2]", 1 + 2j)
+    test_parse("@bytestring 'foo'", b"foo")
+    test_parse("@base64 '{}'".format(
+        base64.standard_b64encode(b'foo').decode('ascii')), b"foo")
+    test_parse("@float 'NaN'", float('NaN'))
+    test_parse("@float '-inf'", float('-Inf'))
     obj = datetime.now().astimezone(timezone.utc)
-    test_parse('@datetime "{}"'.format(obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")), obj)
+    test_parse('@datetime "{}"'.format(
+        obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")), obj)
     obj = timedelta(seconds=666)
     test_parse('@duration {}'.format(obj.total_seconds()), obj)
-    test_parse("@bytestring 'fo\x20o'",b"fo o")
+    test_parse("@bytestring 'fo\x20o'", b"fo o")
     test_parse("@float '{}'".format((3000000.0).hex()), 3000000.0)
     test_parse(hex(123), 123)
 
-    test_dump(1,"1")
-    
+    test_dump(1, "1")
+
     test_dump_err(Decorated('float', 123), BadDecorator)
     test_parse_err('@object "foo"', BadDecorator)
 
@@ -852,23 +890,26 @@ def main():
         -0.0, +0.0, 1.9,
         True, False, None,
         "str", b"bytes",
-        [1,2,3], {"c":3,"a":1,"b":2,}, set([1,2,3]), OrderedDict(a=1,b=2),
-        1+2j,float('NaN'),
+        [1, 2, 3], {"c": 3, "a": 1, "b": 2, }, set(
+            [1, 2, 3]), OrderedDict(a=1, b=2),
+        1 + 2j, float('NaN'),
         datetime.now().astimezone(timezone.utc),
-         timedelta(seconds=666),
+        timedelta(seconds=666),
     ]
 
     for x in tests:
         test_round(x)
-    
+
     for x in tests:
         out = parse(dump(x))
         out2 = djson_parse(djson_dump(x))
-        if out !=out:
+        if out != out:
             if out2 == out2:
                 raise AssertionError('buf {} != {}'.format(x, out))
         elif out != out2:
             raise AssertionError('buf {} != {}'.format(x, out))
     print('tests passed')
+
+
 if __name__ == '__main__':
     main()
