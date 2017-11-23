@@ -3,7 +3,7 @@ RSON: Restructured Object Notation
 
 JSON:
  - true, false, null
- - "strings" with \" \\\b \f \n \r \t \uFFFF, no control codes
+ - "strings" with \" \\ \b \f \n \r \t \uFFFF, no control codes
  - numbers (unary minus, no leading 0's)
  - [ lists, ]   {"objects":"..."} with only string keys
  - list or object as root item
@@ -66,8 +66,9 @@ RSON datetimes/periods (optional):
  - MAY support RFC 3339
 
 RSON bytestrings (optional):
- - `@base64 "...=="`
  - `@bytestring "....\xff"` (cannot have codepoints >255)
+ - `@base64 "...=="` returns a bytestring if possible
+ - characters must be printable or escaped
 
 RSON complex numbers: (optional)
  - `@complex [0,1]`
@@ -129,12 +130,35 @@ int_b16 = re.compile(r"[-+]?0x[0-9a-fA-F][0-9a-fA-F_]*")
 flt_b10 = re.compile(r"\.[\d_]+(?:[eE](?:\+|-)?[\d+_])?")
 flt_b16 = re.compile(r"\.[0-9a-fA-F_]+[pP](?:\+|-)?[\d_]+")
 
-string_dq = re.compile(r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
-string_sq = re.compile(r"'(?:[^'\\\n\x00-\x1F]|\\(?:[\"'\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
+string_dq = re.compile(r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
+string_sq = re.compile(r"'(?:[^'\\\n\x00-\x1F]|\\(?:[\"'\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 
 decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
 
+escapes = {
+    'b':'\b',
+    'n':'\n',
+    'f':'\f',
+    'r':'\r',
+    't':'\t',
+    '/':'/',
+    '"':'"',
+    "'":"'",
+    '\\':'\\',
+}
+
+byte_escapes = {
+    'b':b'\b',
+    'n':b'\n',
+    'f':b'\f',
+    'r':b'\r',
+    't':b'\t',
+    '/':b'/',
+    '"':b'"',
+    "'":b"'",
+    '\\':b'\\',
+}
 builtin_names = {'null':None,'true':True,'false':False}
 builtin_values = {None:'null',True:'true',False: 'false'}
 
@@ -182,9 +206,9 @@ def parse_rson(buf, pos):
     if m:
         pos = m.end()
 
-    chr = buf[pos]
+    peek = buf[pos]
     name = None
-    if chr == '@':
+    if peek == '@':
         m = decorator_name.match(buf, pos)
         if m:
             pos = m.end()
@@ -192,12 +216,12 @@ def parse_rson(buf, pos):
         else:
             raise SyntaxErr(buf, pos)
 
-    chr = buf[pos]
+    peek = buf[pos]
 
-    if chr == '@':
+    if peek == '@':
         raise SyntaxErro(buf, pos)
 
-    elif chr == '{':
+    elif peek == '{':
         if name == 'object' or name not in builtin_decorators:
             out = OrderedDict()
         elif name == 'dict':
@@ -213,12 +237,15 @@ def parse_rson(buf, pos):
         while buf[pos] != '}':
             key, pos = parse_rson(buf, pos)
 
+            if key in out:
+                raise SemanticErr('duplicate key: {}, {}'.format(key, out))
+
             m = whitespace.match(buf,pos)
             if m:
                 pos = m.end()
 
-            chr = buf[pos]
-            if chr == ':':
+            peek = buf[pos]
+            if peek == ':':
                 pos +=1
                 m = whitespace.match(buf,pos)
                 if m:
@@ -227,24 +254,22 @@ def parse_rson(buf, pos):
                 raise SyntaxErr(buf, pos)
 
             item, pos = parse_rson(buf, pos)
-            if key in out:
-                raise SemanticErr('duplicate key: {}'.format(key))
 
             out[key]=item
 
-            chr = buf[pos]
-            if chr == ',':
+            peek = buf[pos]
+            if peek == ',':
                 pos +=1
                 m = whitespace.match(buf,pos)
                 if m:
                     pos = m.end()
-            elif chr != '}':
+            elif peek != '}':
                 raise SyntaxErr(buf, pos)
         if name not in (None, 'object', 'dict'):
             out = decorate(name,  out)
         return out, pos+1
 
-    elif chr == '[':
+    elif peek == '[':
         if name in (None, 'list', 'complex') or name not in builtin_decorators:
             out = []
         elif name == 'set':
@@ -270,13 +295,13 @@ def parse_rson(buf, pos):
             if m:
                 pos = m.end()
 
-            chr = buf[pos]
-            if chr == ',':
+            peek = buf[pos]
+            if peek == ',':
                 pos +=1
                 m = whitespace.match(buf,pos)
                 if m:
                     pos = m.end()
-            elif chr != ']':
+            elif peek != ']':
                 raise SyntaxErr(buf, pos)
         if name == 'complex':
             out = complex(*out)
@@ -284,15 +309,17 @@ def parse_rson(buf, pos):
             out = decorate(name,  out)
         return out, pos+1
 
-    elif chr == "'" or chr =='"':
+    elif peek == "'" or peek =='"':
         if name in (None, 'string', 'float', 'datetime') or name not in builtin_decorators:
-            pass
+            s = io.StringIO()
+            ascii = False
         elif name in ('base64', 'bytestring'):
-            pass
+            s = io.StringIO()
+            ascii = True
         else:
             raise BadDecorator(name, "{} can't be used on strings".format(name))
 
-        if chr == "'":
+        if peek == "'":
             m = string_sq.match(buf, pos)
             if m:
                 end = m.end()
@@ -305,8 +332,49 @@ def parse_rson(buf, pos):
             else:
                 raise SyntaxErr(buf, pos)
 
-        #XXX: all of this:
-        out = eval(buf[pos:end].replace(r'\x',r'\u00'))
+
+        lo = pos + 1 # skip quotes
+        while lo < end-1:
+            hi = buf.find("\\", lo, end)
+            if hi == -1:
+                s.write(buf[lo:end-1]) # skip quote
+                break
+            s.write(buf[lo:hi])
+
+            esc = buf[hi+1]
+            if esc in escapes:
+                if ascii:
+                    s.write(byte_escapes[esc])
+                else:
+                    s.write(escapes[esc])
+                lo = hi + 2
+            elif esc == 'x':
+                n = buf[hi+2:hi+4]
+                if ascii:
+                    io.write(bytes.fromhex(n))
+                else:
+                    io.write(chr(int(n,16)))
+                lo = hi + 4
+            elif esc == 'u':
+                if not ascii:
+                    raise SemanticErr('bytestring cannot have unicode')
+                n = int(buf[hi+2:hi+6],16)
+                io.write(chr(n))
+                lo = hi + 6
+            elif esc == 'U':
+                if not ascii:
+                    raise SemanticErr('bytestring cannot have unicode')
+                n = int(buf[hi+2:hi+10],16)
+                io.write(chr(n))
+                lo = hi + 10
+            elif esc == '\n':
+                lo = hi + 2
+            elif (buf[hi+1:hi+3]=='\r\n'):
+                lo = hi + 3
+            else:
+                raise SyntaxErr(buf, hi)
+
+        out = s.getvalue()
 
         if name == 'bytestring':
             out = out.encode('latin-1')
@@ -333,7 +401,7 @@ def parse_rson(buf, pos):
 
         return out, end
 
-    elif chr in "-+0123456789":
+    elif peek in "-+0123456789":
         if name in (None, 'int', 'float', 'duration') or name not in builtin_decorators:
             pass
         else:
@@ -606,7 +674,14 @@ def main():
     test_parse("0.0",0.0)
     test_parse("-0.0",-0.0)
     test_parse("'foo'","foo")
+    test_parse(r"'fo\no'","fo\no")
+    test_parse("'\\\\'","\\")
+    test_parse(r"'\b\f\r\n\t\"\'\/'","\b\f\r\n\t\"\'/")
     test_parse("''","")
+    test_parse('"\x20"'," ")
+    test_parse('"\uF0F0"',"\uF0F0")
+    test_parse('"\U0001F0F0"',"\U0001F0F0")
+    test_parse("'\\\\'","\\")
     test_parse("[1]",[1])
     test_parse("[1,]",[1])
     test_parse("[]",[])
