@@ -7,6 +7,7 @@ JSON:
  - numbers (unary minus, no leading 0's)
  - [ lists, ]   {"objects":"..."} with only string keys
  - list or object as root item
+ - whitespace is tab, space, cr, lf
 
 RSON:
  - byte order mark is whitespace
@@ -395,11 +396,10 @@ def parse_rson(buf, pos):
             else:
                 raise SyntaxErr(buf, hi)
 
-        if ascii:
-            if name =='base64':
-                out = base64.standard_b64decode(s)
-            else:
-                out =  s
+        if name == 'base64':
+            out = base64.standard_b64decode(s)
+        elif name == 'bytestring':
+            out =  s
         else:
             out = s.getvalue()
 
@@ -419,7 +419,7 @@ def parse_rson(buf, pos):
             if m:
                 out = float.fromhex(out)
             else:
-                raise SemanticErr("invalid float literal: {}".format(out))
+                raise SemanticErr("invalid C99 float literal: {}".format(out))
         elif name not in (None, 'string', 'base64', 'bytestring'):
             out = decorate(name,  out)
 
