@@ -3,7 +3,7 @@ RSON: Restructured Object Notation
 
 JSON:
  - true, false, null
- - "strings" with \" \\ \b \f \n \r \t \uFFFF, no control codes
+ - "strings" with \" \\ \/ \b \f \n \r \t \uFFFF, no control codes
  - numbers (unary minus, no leading 0's)
  - [ lists, ]   {"objects":"..."} with only string keys
  - list or object as root item
@@ -12,8 +12,8 @@ RSON:
  - byte order mark is whitespace
  - any value as root object
  - use `#....` as comments
- - decorators: tags on existing values: `@float "NaN"` 
- - new optional types through decorators: datetime, period, set, dict, complex
+ - decorators: tags on existing values: `@a.name [1,2,3]` 
+ - optional types through decorators: datetime, period, set, dict, complex
 
 RSON strings:
  - \UFFFFFFFF \xFF \' escapes
@@ -24,10 +24,9 @@ RSON strings:
 RSON numbers:
  - allow leading zero, underscores (except leading digits)
  - allow unary minus, plus
- - binary: 0b1010
- - octal: 0o777
- - hex: 0xFF and C99 style hex floats
- - decorated strings for special floats: `@float "NaN"`
+ - binary ints: 0b1010
+ - octal ints: 0o777
+ - hex ints: 0xFF 
 
 RSON lists:
  - allow trailing commas
@@ -49,6 +48,11 @@ RSON decorated objects:
 
  - parsers may reject unknown, or return a wrapped object 
 
+RSON float strings (optional):
+ - `@float "0x0p0"` C99 style, sprintf('%a') format
+ - `@float "NaN"` or nan,Inf,inf,+Inf,-Inf,+inf,-inf
+ -  no underscores
+
 RSON sets (optional):
  - `@set [1,2,3]`
  - always a decorated list
@@ -66,24 +70,23 @@ RSON datetimes/periods (optional):
  - MAY support RFC 3339
 
 RSON bytestrings (optional):
- - `@bytestring "....\xff"` (cannot have codepoints >255)
+ - `@bytestring "....\xff"` (cannot have codepoints outside ascii printable)
  - `@base64 "...=="` returns a bytestring if possible
- - characters must be printable or escaped
 
 RSON complex numbers: (optional)
  - `@complex [0,1]`
 
-RSON Builtin Decorators:
+RSON Reserved Decorators:
  - `@bool` on true, or false
- - `@complex` on null
+ - `@object` on null
 
- - @int, @float on numbers
+ - @int on ints, @float on numbers
  - @duration on numbers
 
  - @string on strings
- - @float on strings, for NaN, -Inf, +Inf only
+ - @float on strings, for Hex floats, NaN, -Inf, +Inf only
  - @datetime on strings
- - @base64 / @bytestring on strings
+ - @base64 / @bytestring on strings (all non printable ascii must be \xFF escaped)
 
  - @set on lists
  - @complex on lists
@@ -122,19 +125,21 @@ class BadDecorator(SemanticErr):
 
 whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
-int_b2 = re.compile(r"[-+]?0b[01][01_]*")
-int_b8 = re.compile(r"[-+]?0o[0-7][0-7_]*")
-int_b10 = re.compile(r"[-+]?(?!0[box])\d[\d_]*")
-int_b16 = re.compile(r"[-+]?0x[0-9a-fA-F][0-9a-fA-F_]*")
+int_b2 = re.compile(r"0b[01][01_]*")
+int_b8 = re.compile(r"0o[0-7][0-7_]*")
+int_b10 = re.compile(r"\d[\d_]*")
+int_b16 = re.compile(r"0x[0-9a-fA-F][0-9a-fA-F_]*")
 
-flt_b10 = re.compile(r"\.[\d_]+(?:[eE](?:\+|-)?[\d+_])?")
-flt_b16 = re.compile(r"\.[0-9a-fA-F_]+[pP](?:\+|-)?[\d_]+")
+flt_b10 = re.compile(r"\.[\d_]+")
+exp_b10 = re.compile(r"[eE](?:\+|-)?[\d+_]")
 
 string_dq = re.compile(r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
 string_sq = re.compile(r"'(?:[^'\\\n\x00-\x1F]|\\(?:[\"'\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 
 decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
+
+c99_flt = re.compile(r"NaN|nan|[-+]?Inf|[-+]?inf|[-+]?0x[0-9a-fA-F][0-9a-fA-F]*\.[0-9a-fA-F]+[pP](?:\+|-)?[\d]+")
 
 escapes = {
     'b':'\b',
@@ -357,23 +362,31 @@ def parse_rson(buf, pos):
                     s.write(escapes[esc])
                 lo = hi + 2
             elif esc == 'x':
-                n = buf[hi+2:hi+4]
+                n = int(buf[hi+2:hi+4],16)
                 if ascii:
-                    s.extend(bytes.fromhex(n))
+                    s.append(n)
                 else:
-                    s.write(chr(int(n,16)))
+                    s.write(chr(n))
                 lo = hi + 4
             elif esc == 'u':
-                if ascii:
-                    raise SemanticErr('bytestring cannot have unicode')
                 n = int(buf[hi+2:hi+6],16)
-                s.write(chr(n))
+                if ascii:
+                    if n > 0xFF:
+                        raise SemanticErr('bytestring cannot have unicode')
+                    else:
+                        s.append(n)
+                else:
+                    s.write(chr(n))
                 lo = hi + 6
             elif esc == 'U':
-                if ascii:
-                    raise SemanticErr('bytestring cannot have unicode')
                 n = int(buf[hi+2:hi+10],16)
-                s.write(chr(n))
+                if ascii:
+                    if n > 0xFF:
+                        raise SemanticErr('bytestring cannot have unicode')
+                    else:
+                        s.append(n)
+                else:
+                    s.write(chr(n))
                 lo = hi + 10
             elif esc == '\n':
                 lo = hi + 2
@@ -402,8 +415,9 @@ def parse_rson(buf, pos):
             else:
                 raise SemanticErr("invalid datetime: {}".format(out))
         elif name == 'float':
-            if out.lower() in ('nan','-inf','+inf','inf'):
-                out = float(out)
+            m = c99_flt.match(out)
+            if m:
+                out = float.fromhex(out)
             else:
                 raise SemanticErr("invalid float literal: {}".format(out))
         elif name not in (None, 'string', 'base64', 'bytestring'):
@@ -417,55 +431,76 @@ def parse_rson(buf, pos):
         else:
             raise BadDecorator(name, "{} can't be used on numbers".format(name))
 
-        m = int_b16.match(buf, pos)
-        if m:
-            t = flt_b16.match(buf, m.end())
-            if t:
-                end = t.end()
-                out = parse_rson_float(name, buf[pos:end])
-                if name not in (None, 'int', 'float', 'duration'):
-                    out = decorate(out)
-                return out, end
+        flt_end = None
+        exp_end = None
 
+        sign = +1
+
+        if buf[pos] in "+-":
+            if buf[pos] == "-":
+                sign = -1
+            pos +=1
+        peek = buf[pos:pos+2]
+
+        if peek in ('0x','0o','0b'):
+            if peek == '0x':
+                base = 16
+                m = int_b16.match(buf, pos)
+                if m:
+                    end = m.end()
+                else:
+                    raise SyntaxErr(buf,pos)
+            elif peek == '0o':
+                base = 8
+                m = int_b8.match(buf, pos)
+                if m:
+                    end = m.end()
+                else:
+                    raise SyntaxErr(buf,pos)
+            elif peek == '0b':
+                base = 2
+                m = int_b2.match(buf, pos)
+                if m:
+                    end = m.end()
+                else:
+                    raise SyntaxErr(buf,pos)
+
+            out = sign * int(buf[pos+2:end].replace('_',''),base)
+        else:
+            m = int_b10.match(buf, pos)
+            if m:
+                int_end = m.end()
+                end = int_end
             else:
-                end = m.end()
-                out = parse_rson_int(name, buf[pos:end])
-                if name not in (None, 'int', 'float', 'duration'):
-                    out = decorate(out)
-                return out, end
+                raise SyntaxErr(buf,pos)
 
-        m = int_b8.match(buf, pos)
-        if m:
-            end = m.end()
-            out = parse_rson_int(name, buf[pos:end])
-            if name not in (None, 'int', 'float', 'duration'):
-                out = decorate(out)
-            return out, end
-
-        m = int_b2.match(buf, pos)
-        if m:
-            end = m.end()
-            out = parse_rson_int(name, buf[pos:end])
-            if name not in (None, 'int', 'float', 'duration'):
-                out = decorate(out)
-            return out, end
-
-        m = int_b10.match(buf, pos)
-        if m:
-            t = flt_b10.match(buf, m.end())
+            t = flt_b10.match(buf, end)
             if t:
-                end = t.end()
-                out = parse_rson_float(name, buf[pos:end])
-                if name not in (None, 'int', 'float', 'duration'):
-                    out = decorate(out)
-                return out, end
+                flt_end = t.end()
+                end = flt_end
 
+            e = exp_b10.match(buf, end)
+            if e:
+                exp_end = e.end()
+                end = exp_end
+
+            if flt_end or exp_end:
+                out = sign * float(buf[pos:end].replace('_',''))
             else:
-                end = m.end()
-                out = parse_rson_int(name, buf[pos:end])
-                if name not in (None, 'int', 'float', 'duration'):
-                    out = decorate(out)
-                return out, end
+                out = sign * int(buf[pos:end].replace('_',''),10)
+
+        if name == 'duration':
+            out = timedelta(seconds=out)
+        elif name == 'int':
+            if flt_end or exp_end:
+                raise SemanticErr('cant decorate float with @int')
+        elif name == 'float':
+            if not isintance(out, float):
+                out = float(out)
+        elif name is not None:
+            out = decorate(out)
+
+        return out, end
 
     else:
         m = identifier.match(buf, pos)
@@ -495,34 +530,25 @@ def parse_rson(buf, pos):
 
     raise SyntaxErr(buf, pos)
 
-def parse_rson_int(name, buf):
-    if buf.startswith('0x'):
-        out = int(buf[2:].replace('_',''), 16)
-    elif buf.startswith('0o'):
-        out = int(buf[2:].replace('_',''), 8)
-    elif buf.startswith('0b'):
-        out = int(buf[2:].replace('_',''), 2)
-    else:
-        out = int(buf.replace('_',''))
+def parse(buf):
+    obj, pos = parse_rson(buf, 0)
 
-    if name == 'float':
-        return float(item)
-    elif name == 'duration':
-        return timedelta(seconds=out)
-    return out
+    m = whitespace.match(buf,pos)
+    if m:
+        pos = m.end()
+        m = whitespace.match(buf,pos)
 
-def parse_rson_float(name, buf):
-    if buf.startswith(('0x','+0x','-0x')):
-        out = float.fromhex(buf.replace('_',''))
-    else:
-        out = float(buf.replace('_',''))
+    if pos != len(buf):
+        print('trail',buf[pos:])
+        raise SyntaxErr(buf, pos)
 
-    if name == 'int':
-        return int(item)
-    elif name == 'duration':
-        return timedelta(seconds=out)
+    return obj
 
-    return out
+def dump(obj):
+    buf = io.StringIO('')
+    dump_rson(obj, buf)
+    return buf.getvalue()
+
 
 def dump_rson(obj,buf):
     if obj is True or obj is False or obj is None:
@@ -539,7 +565,7 @@ def dump_rson(obj,buf):
             buf.write('@float "{}"'.format(hex)) 
     elif isinstance(obj, complex):
         buf.write("@complex [{}, {}]".format(obj.real, obj.imag))
-    elif isinstance(obj, bytes):
+    elif isinstance(obj, (bytes, bytearray)):
         buf.write('@base64 "')
         buf.write(base64.standard_b64encode(obj).decode('ascii'))
         buf.write('"')
@@ -598,26 +624,6 @@ def dump_rson(obj,buf):
         buf.write('@{} '.format(name))
         dump_rson(value, buf)
 
-def parse(buf):
-    obj, pos = parse_rson(buf, 0)
-
-    m = whitespace.match(buf,pos)
-    if m:
-        pos = m.end()
-        m = whitespace.match(buf,pos)
-
-    if pos != len(buf):
-        raise SyntaxErr(buf, pos)
-
-    return obj
-
-def dump(obj):
-    buf = io.StringIO('')
-    dump_rson(obj, buf)
-    return buf.getvalue()
-
-
-
 # Tests
 
 def test_parse(buf, obj):
@@ -669,6 +675,9 @@ def test_round(obj):
             raise AssertionError('{} != {}'.format(obj, out))
     else:
         if buf0 != buf1:
+            print(obj, buf0)
+            print(obj1,buf1)
+            print(out)
             raise AssertionError('buf {} != {}'.format(buf0, buf1))
         if obj != obj1:
             raise AssertionError('buf {} != {}'.format(obj, obj1))
@@ -709,7 +718,7 @@ def main():
     obj = timedelta(seconds=666)
     test_parse('@duration {}'.format(obj.total_seconds()), obj)
     test_parse("@bytestring 'fo\x20o'",b"fo o")
-    test_parse((3000000.0).hex(), 3000000.0)
+    test_parse("@float '{}'".format((3000000.0).hex()), 3000000.0)
     test_parse(hex(123), 123)
 
     test_dump(1,"1")
