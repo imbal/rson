@@ -15,6 +15,7 @@ RSON:
  - decorators: tags on existing values: `@float "NaN"` `@set [1,2,3,]`
  - all built in types have names reserved, used for special values
  - new types through decorators: datetime, period, set, dict
+ - optional complex type
 
 RSON strings:
  - \UFFFFFFFF \xFF \' escapes
@@ -64,6 +65,13 @@ RSON bytestrings:
 
 RSON complex numbers: (optional)
  - `@complex [0,1]`
+
+RSON decorated objects:
+ - whitespace between decorator name and object is *mandatory*
+ - `@int 1`, `@string "two"` are just `1` and `"two"`
+ - `@foo.foo {"foo":1}` any unicode letter/digit, or a .
+ - parsers may reject unknown, or return a wrapped object 
+
 """
 
 from collections import namedtuple, OrderedDict, defaultdict
@@ -91,6 +99,8 @@ decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
 
 builtin_names = {'null':None,'true':True,'false':False}
+builtin_values = {None:'null',True:'true',False: 'false'}
+
 builtin_decorators = set("""
         bool int float complex
         string bytestring base64
@@ -118,7 +128,7 @@ class Decorated:
 def decorate_object(name, item):
     if name == 'object':
         return item
-    elif name == 'hash':
+    elif name == 'dict':
         return dict(item)
     elif name in builtin_decorators:
         raise SemanticErr(name, item)
@@ -396,18 +406,106 @@ def parse(buf):
 
 
 def dump(obj):
-    pass
+    buf = io.StringIO('')
+    dump_rson(obj, buf)
+    return buf.getvalue()
 
 def dump_rson(obj,buf):
-    pass
+    if obj is True or obj is False or obj is None:
+        print(obj, builtin_values)
+        buf.write(builtin_values[obj])
+    elif isinstance(obj, str):
+        buf.write(repr(obj)) #fix escapes
+    elif isinstance(obj, int):
+        buf.write(str(obj))
+    elif isinstance(obj, float):
+        hex = obj.hex()
+        if hex.startswith(('0','-')):
+            buf.write(str(obj))
+        else:
+            buf.write('@float "{}"'.format(hex)) 
+    elif isinstance(obj, complex):
+        buf.write("@complex [{}, {}]".format(obj.real, obj.imag))
+    elif isinstance(obj, bytes):
+        buf.write('@base64 "')
+        buf.write(base64.standard_b64encode(obj).decode('ascii'))
+        buf.write('"')
+    elif isinstance(obj,(list, tuple)):
+        buf.write('[')
+        first = True
+        for x in obj:
+            if first:
+                first = False
+            else:
+                buf.write(", ")
+            dump_rson(x, buf)
+        buf.write(']')
+    elif isinstance(obj, set):
+        buf.write('@set [')
+        first = True
+        for x in obj:
+            if first:
+                first = False
+            else:
+                buf.write(", ")
+            dump_rson(x, buf)
+        buf.write(']')
+    elif isinstance(obj, OrderedDict):
+        buf.write('{')
+        first = True
+        for k,v in obj.items():
+            if first:
+                first = False
+            else:
+                buf.write(", ")
+            dump_rson(k, buf)
+            buf.write(": ")
+            dump_rson(v, buf)
+        buf.write('}')
+    elif isinstance(obj, dict):
+        buf.write('@dict {')
+        first = True
+        for k in sorted(obj.keys()):
+            if first:
+                first = False
+            else:
+                buf.write(", ")
+            dump_rson(k, buf)
+            buf.write(": ")
+            dump_rson(obj[k], buf)
+        buf.write('}')
+    elif isinstance(obj, datetime):
+        obj = obj.astimezone(timezone.utc)
+        buf.write('@datetime "{}"'.format(obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")))
+    elif isinstance(obj, timedelta):
+        buf.write('@duration {}'.format(obj.total_seconds()))
+    elif isinstance(obj, Decorated):
+        buf.write('@{} '.format(obj.name))
+        dump_rson(obj.value, buf)
+    else:
+        raise Exception('no')
 
 def test_parse(buf, obj):
     print(repr(buf), '->', obj)
     out = parse(buf)
 
     if (obj != obj and out == out) or (obj == obj and obj != out):
-        raise AssertionError('{} != {}'.format(parse(buf),obj))
+        raise AssertionError('{} != {}'.format(obj, out))
 
+def test_dump(obj, buf):
+    out = dump(obj)
+    print(obj, 'dumps to ',repr(out))
+
+    if buf != out:
+        raise AssertionError('{} != {}'.format(buf, out))
+
+def test_round(obj):
+    buf = dump(obj)
+    print(obj, 'dumps to',repr(buf))
+    out = parse(buf)
+    if (obj != obj and out == out) or (obj == obj and obj != out):
+        raise AssertionError('{} != {}'.format(obj, out))
+        
 def main():
     test_parse("0",0)
     test_parse("0x0_1_2_3",0x123)
@@ -436,6 +534,21 @@ def main():
     test_parse('@duration {}'.format(obj.total_seconds()), obj)
     test_parse("@bytestring 'fo\x20o'",b"fo o")
 
+    test_dump(1,"1")
+
+    for x in [
+        0, -1, +1,
+        -0.0, +0.0, 1.9,
+        True, False, None,
+        "str", b"bytes",
+        [1,2,3], {"a":1}, set([1,2,3]), OrderedDict(a=1,b=2),
+        1+2j,float('NaN'),
+        datetime.now().astimezone(timezone.utc),
+         timedelta(seconds=666),
+    ]:
+        test_round(x)
+
+    
 
 
 if __name__ == '__main__':
