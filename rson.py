@@ -12,10 +12,8 @@ RSON:
  - byte order mark is whitespace
  - any value as root object
  - use `#....` as comments
- - new types through decorators: datetime, period, set, dict
- - decorators: tags on existing values: `@float "NaN"` `@set [1,2,3,]`
- - all built in types have names reserved, used for special values
- - optional complex type
+ - decorators: tags on existing values: `@float "NaN"` 
+ - new optional types through decorators: datetime, period, set, dict, complex
 
 RSON strings:
  - \UFFFFFFFF \xFF \' escapes
@@ -42,37 +40,36 @@ RSON objects:
 
 RSON decorated objects:
  - allow objects to be 'decorated', via a named tag
+ - whitespace between decorator name and object is *mandatory*
+ - all built in types have names reserved, used for special values
+ - `@foo.foo {"foo":1}` name is any unicode letter/digit, or a .
+ - `@int 1`, `@string "two"` are just `1` and `"two"`
+ - parsers may reject unknown, or return a wrapped object 
 
-RSON sets:
+RSON sets (optional):
  - `@set [1,2,3]`
  - always a decorated list
  - no duplicate items
 
-RSON dicts:
+RSON dicts (optional):
  - `@dict {"a":1}` or `@dict [["a",1],...]`
  - keys must be in lexical order
  - keys must be comparable, (usually means same type, all string, all number)
 
-RSON datetimes/periods:
+RSON datetimes/periods (optional):
  - `@datetime "2017-11-22T23:32:07.100497Z"`
  - `@duration 60` (in seconds)
  - UTC must be supported, using `Z` prefix
  - MAY support RFC 3339
 
-RSON bytestrings:
+RSON bytestrings (optional):
  - `@base64 "...=="`
  - `@bytestring "....\xff"` (cannot have codepoints >255)
 
 RSON complex numbers: (optional)
  - `@complex [0,1]`
 
-RSON decorated objects:
- - whitespace between decorator name and object is *mandatory*
- - `@foo.foo {"foo":1}` any unicode letter/digit, or a .
- - `@int 1`, `@string "two"` are just `1` and `"two"`
- - parsers may reject unknown, or return a wrapped object 
-
-Standard Decorators:
+RSON Builtin Decorators:
  - `@bool` on true, or false
  - `@complex` on null
 
@@ -116,7 +113,7 @@ flt_b10 = re.compile(r"\.[\d_]+(?:[eE](?:\+|-)?[\d+_])?")
 flt_b16 = re.compile(r"\.[0-9a-fA-F_]+[pP](?:\+|-)?[\d_]+")
 
 string_dq = re.compile(r'"(?:[^"\\\n\x00-\x1F]|\\(?:[\'"\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
-string_sq = re.compile(r"'(?:[^'\\\n]|\\(?:[\"'\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
+string_sq = re.compile(r"'(?:[^'\\\n\x00-\x1F]|\\(?:[\"'\\/bfnrt\n]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 
 decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
