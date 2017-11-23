@@ -314,7 +314,7 @@ def parse_rson(buf, pos):
             s = io.StringIO()
             ascii = False
         elif name in ('base64', 'bytestring'):
-            s = io.StringIO()
+            s = io.BytesIO()
             ascii = True
         else:
             raise BadDecorator(name, "{} can't be used on strings".format(name))
@@ -337,9 +337,16 @@ def parse_rson(buf, pos):
         while lo < end-1:
             hi = buf.find("\\", lo, end)
             if hi == -1:
-                s.write(buf[lo:end-1]) # skip quote
+                if ascii:
+                    s.write(buf[lo:end-1].encode('ascii'))
+                else:
+                    s.write(buf[lo:end-1]) # skip quote
                 break
-            s.write(buf[lo:hi])
+
+            if ascii:
+                s.write(buf[lo:hi].encode('ascii'))
+            else:
+                s.write(buf[lo:hi])
 
             esc = buf[hi+1]
             if esc in escapes:
@@ -376,9 +383,7 @@ def parse_rson(buf, pos):
 
         out = s.getvalue()
 
-        if name == 'bytestring':
-            out = out.encode('latin-1')
-        elif name == 'base64':
+        if name == 'base64':
             out= base64.standard_b64decode(out)
         elif name == 'datetime':
             if out[-1].lower() == 'z':
