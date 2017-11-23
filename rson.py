@@ -41,9 +41,12 @@ RSON objects:
 RSON decorated objects:
  - allow objects to be 'decorated', via a named tag
  - whitespace between decorator name and object is *mandatory*
+ - do not nest
+
  - all built in types have names reserved, used for special values
  - `@foo.foo {"foo":1}` name is any unicode letter/digit, or a .
  - `@int 1`, `@string "two"` are just `1` and `"two"`
+
  - parsers may reject unknown, or return a wrapped object 
 
 RSON sets (optional):
@@ -171,8 +174,17 @@ def parse_rson(buf, pos):
 
     chr = buf[pos]
 
-    if chr == '{':
-        out = OrderedDict()
+    if chr == '@':
+        raise SyntaxErro(buf, pos)
+
+    elif chr == '{':
+        if name == 'object' or name not in builtin_decorators:
+            out = OrderedDict()
+        elif name == 'dict':
+            out = dict()
+        else:
+            raise SemanticErr(name, "has no meaning")
+
         pos+=1
         m = whitespace.match(buf,pos)
         if m:
@@ -208,19 +220,27 @@ def parse_rson(buf, pos):
                     pos = m.end()
             elif chr != '}':
                 raise SyntaxErr(buf, pos)
-        if name:
-            out = decorate_object(name,  out)
+        if name not in (None, 'object', 'dict'):
+            out = decorate(name,  out)
         return out, pos+1
 
     elif chr == '[':
-        out = []
+        if name in (None, 'list', 'complex') or name not in builtin_decorators:
+            out = []
+            append = out.append
+        elif name == 'set':
+            out = set()
+            append = out.add
+        else:
+            raise SemanticErr(name, "has no meaning")
+
         pos+=1
         m = whitespace.match(buf,pos)
         if m:
             pos = m.end()
         while buf[pos] != ']':
             item, pos = parse_rson(buf, pos)
-            out.append(item)
+            append(item)
 
             m = whitespace.match(buf,pos)
             if m:
@@ -234,60 +254,92 @@ def parse_rson(buf, pos):
                     pos = m.end()
             elif chr != ']':
                 raise SyntaxErr(buf, pos)
-        if name:
-            out = decorate_list(name,  out)
+        if name == 'complex':
+            out = complex(*out)
+        elif name not in (None, 'list', 'set'):
+            out = decorate(name,  out)
         return out, pos+1
 
-    elif chr == "'":
-        m = string_sq.match(buf, pos)
-        if m:
-            end = m.end()
-            out = parse_rson_string(name, buf[pos:end])
-            if name:
-                out = decorate_string(name,  out)
-            return out, end
+    elif chr == "'" or chr =='"':
+        if name in (None, 'string', 'float', 'datetime') or name not in builtin_decorators:
+            pass
+        elif name in ('base64', 'bytestring'):
+            pass
+        else:
+            raise SemanticErr(name, "has no meaning")
 
-    elif chr == '"':
-        m = string_dq.match(buf, pos)
-        if m:
-            end = m.end()
-            out = parse_rson_string(name, buf[pos:end])
-            if name:
-                out = decorate_string(name,  out)
-            return out, end
+        if chr == "'":
+            m = string_sq.match(buf, pos)
+            if m:
+                end = m.end()
+            else:
+                raise SyntaxErr(buf, pos)
+        else:
+            m = string_dq.match(buf, pos)
+            if m:
+                end = m.end()
+            else:
+                raise SyntaxErr(buf, pos)
+
+        out = parse_rson_string(name, buf[pos:end])
+
+        if name == 'datetime':
+            if out[-1].lower() == 'z':
+                if '.' in out:
+                    date, sec = out[:-1].split('.')
+                    date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                    sec = float("0."+sec)
+                    out = date + timedelta(seconds=sec)
+                else:
+                    out = datetime.strptime(out, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+            else:
+                raise SemanticErr(name, out)
+        elif name == 'float':
+            if out.lower() in ('nan','-inf','+inf','inf'):
+                out = float(out)
+            else:
+                raise SemanticErr(name, out)
+        elif name not in (None, 'string', 'base64', 'bytestring'):
+            out = decorate(name,  out)
+
+        return out, end
 
     elif chr in "-+0123456789":
+        if name in (None, 'int', 'float', 'duration') or name not in builtin_decorators:
+            pass
+        else:
+            raise SemanticErr(name, "has no meaning")
         m = int_b16.match(buf, pos)
         if m:
             t = flt_b16.match(buf, m.end())
             if t:
                 end = t.end()
-                out = parse_rson_float(buf[pos:end])
-                if name:
-                    out = decorate_float(name,  out)
+                out = parse_rson_float(name, buf[pos:end])
+                if name not in (None, 'int', 'float', 'duration'):
+                    out = decorate(out)
                 return out, end
 
             else:
                 end = m.end()
-                out = parse_rson_int(buf[pos:end])
-                if name:
-                    out = decorate_number(name,  out)
+                out = parse_rson_int(name, buf[pos:end])
+                if name not in (None, 'int', 'float', 'duration'):
+                    out = decorate(out)
                 return out, end
 
         m = int_b8.match(buf, pos)
         if m:
             end = m.end()
-            out = parse_rson_int(buf[pos:end])
-            if name:
-                out = decorate_number(name,  out)
+            out = parse_rson_int(name, buf[pos:end])
+            if name not in (None, 'int', 'float', 'duration'):
+                out = decorate(out)
             return out, end
 
         m = int_b2.match(buf, pos)
         if m:
             end = m.end()
-            out = parse_rson_int(buf[pos:end])
-            if name:
-                out = decorate_number(name,  out)
+            out = parse_rson_int(name, buf[pos:end])
+            if name not in (None, 'int', 'float', 'duration'):
+                out = decorate(out)
             return out, end
 
         m = int_b10.match(buf, pos)
@@ -295,16 +347,16 @@ def parse_rson(buf, pos):
             t = flt_b10.match(buf, m.end())
             if t:
                 end = t.end()
-                out = parse_rson_float(buf[pos:end])
-                if name:
-                    out = decorate_number(name,  out)
+                out = parse_rson_float(name, buf[pos:end])
+                if name not in (None, 'int', 'float', 'duration'):
+                    out = decorate(out)
                 return out, end
 
             else:
                 end = m.end()
-                out = parse_rson_int(buf[pos:end])
-                if name:
-                    out = decorate_number(name,  out)
+                out = parse_rson_int(name, buf[pos:end])
+                if name not in (None, 'int', 'float', 'duration'):
+                    out = decorate(out)
                 return out, end
 
     else:
@@ -313,111 +365,62 @@ def parse_rson(buf, pos):
             end = m.end()
             item = buf[pos:end]
             if item in builtin_names:
+
                 out = builtin_names[item]
-                if name:
-                    out = decorate_builtin(name,  out)
+                if name == 'object':
+                    if buf != 'null':
+                        raise SemanticErr('object','must be null or {}')
+                elif name == 'bool':
+                    if buf not in ('true', 'false'): 
+                        raise SemanticErr('bool','must be true or false')
+                elif name in builtin_decorators:
+                    raise SemanticErr(name, "has no meaning")
+                elif name is not None:
+                    out = decorate(name,  out)
                 return out, end
 
     raise SyntaxErr(buf, pos)
 
-def decorate_object(name, item):
-    if name == 'object':
-        return item
-    elif name == 'dict':
-        # XXX: create this ahead of time
-        return dict(item)
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_list(name, item):
-    if name == 'list':
-        return item
-    elif name == 'set':
-        out = set()
-        for x in item:
-            if x in out:
-                raise SemanticErr('duplicate', x)
-            out.add(x)
-        return out
-    elif name == 'complex':
-        return complex(item[0], item[1])
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_string(name, item):
-    if name == 'string':
-        return item
-    elif name == 'bytestring':
-        return item.encode('latin-1')
-    elif name == 'base64':
-        return base64.standard_b64decode(item)
-    elif name == 'datetime':
-        if item[-1].lower() == 'z':
-            if '.' in item:
-                date, sec = item[:-1].split('.')
-                date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-                sec = float("0."+sec)
-                return date + timedelta(seconds=sec)
-            else:
-                return datetime.strptime(item, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        else:
-            raise SemanticErr(name, item)
-
-    elif name == 'float':
-        if item.lower() in ('nan','-inf','+inf','inf'):
-            return float(item)
-        else:
-            raise SemanticErr(name, item)
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_number(name, item):
-    if name == 'int':
-        return int(item)
-    elif name == 'float':
-        return float(item)
-    elif name == 'duration':
-        return timedelta(seconds=item)
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_builtin(name, item):
-    if name == 'bool' and item in (True,False):
-        return item
-    elif name == 'object' and item is None:
-        return item
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
 def parse_rson_string(name, buf):
     # XXX: replace escapes properly.
-    return eval(buf.replace(r'\x',r'\u00'))
+    item = eval(buf.replace(r'\x',r'\u00'))
 
-def parse_rson_int(buf):
+    if name == 'bytestring':
+        #XXX: encode this ahead of time
+        return item.encode('latin-1')
+    elif name == 'base64':
+        #XXX: encode this ahead of time?
+        return base64.standard_b64decode(item)
+    return item
+
+def parse_rson_int(name, buf):
     if buf.startswith('0x'):
-        return int(buf[2:].replace('_',''), 16)
+        out = int(buf[2:].replace('_',''), 16)
     elif buf.startswith('0o'):
-        return int(buf[2:].replace('_',''), 8)
+        out = int(buf[2:].replace('_',''), 8)
     elif buf.startswith('0b'):
-        return int(buf[2:].replace('_',''), 2)
+        out = int(buf[2:].replace('_',''), 2)
     else:
-        return int(buf.replace('_',''))
+        out = int(buf.replace('_',''))
 
-def parse_rson_float(buf):
+    if name == 'float':
+        return float(item)
+    elif name == 'duration':
+        return timedelta(seconds=out)
+    return out
+
+def parse_rson_float(name, buf):
     if buf.startswith(('0x','+0x','-0x')):
-        return float.fromhex(buf.replace('_',''))
+        out = float.fromhex(buf.replace('_',''))
     else:
-        return float(buf.replace('_',''))
+        out = float(buf.replace('_',''))
+
+    if name == 'int':
+        return int(item)
+    elif name == 'duration':
+        return timedelta(seconds=out)
+
+    return out
 
 def parse(buf):
     obj, pos = parse_rson(buf, 0)
@@ -575,6 +578,9 @@ def main():
     obj = timedelta(seconds=666)
     test_parse('@duration {}'.format(obj.total_seconds()), obj)
     test_parse("@bytestring 'fo\x20o'",b"fo o")
+    test_parse((3000000.0).hex(), 3000000.0)
+    test_parse(hex(123), 123)
+
 
     test_dump(1,"1")
 
@@ -589,9 +595,6 @@ def main():
          timedelta(seconds=666),
     ]:
         test_round(x)
-
     
-
-
 if __name__ == '__main__':
     main()
