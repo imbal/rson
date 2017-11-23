@@ -38,7 +38,7 @@ RSON objects:
  - like JSON, string only keys
  - no duplicate keys
  - insertion order must be preserved
- - alow 
+ - allow trailing commas
 
 RSON decorated objects:
  - allow objects to be 'decorated', via a named tag
