@@ -138,10 +138,12 @@ class SyntaxErr(Exception):
         Exception.__init__(self)
 
 class SemanticErr(Exception):
-    def __init__(self, name, item):
+    pass
+
+class BadDecorator(SemanticErr):
+    def __init__(self, name, reason):
         self.name = name
-        self.item = item
-        Exception.__init__(self)
+        SemanticErr.__init__(self,reason)
 
 class Decorated:
     def __init__(self, name, value):
@@ -154,7 +156,7 @@ def undecorate(obj):
         
 def decorate(name, value):
     if name in builtin_decorators:
-        raise SemanticErr(name, value)
+        raise BadDecorator(name, "{} is reserved".format(name))
     return Decorated(name, value)
 
 def parse_rson(buf, pos):
@@ -183,7 +185,7 @@ def parse_rson(buf, pos):
         elif name == 'dict':
             out = dict()
         else:
-            raise SemanticErr(name, "has no meaning")
+            raise BadDecorator(name, "{} can't be used on objects".format(name))
 
         pos+=1
         m = whitespace.match(buf,pos)
@@ -208,7 +210,7 @@ def parse_rson(buf, pos):
 
             item, pos = parse_rson(buf, pos)
             if key in out:
-                raise SemanticErr('duplicate',key)
+                raise SemanticErr('duplicate key: {}'.format(key))
 
             out[key]=item
 
@@ -227,12 +229,10 @@ def parse_rson(buf, pos):
     elif chr == '[':
         if name in (None, 'list', 'complex') or name not in builtin_decorators:
             out = []
-            append = out.append
         elif name == 'set':
             out = set()
-            append = out.add
         else:
-            raise SemanticErr(name, "has no meaning")
+            raise BadDecorator(name, "{} can't be used on lists".format(name))
 
         pos+=1
         m = whitespace.match(buf,pos)
@@ -240,7 +240,13 @@ def parse_rson(buf, pos):
             pos = m.end()
         while buf[pos] != ']':
             item, pos = parse_rson(buf, pos)
-            append(item)
+            if name == 'set':
+                if item in out:
+                    raise SemanticErr('duplicate item in set: {}'.format(item))
+                else:
+                    out.add(item)
+            else:
+                out.append(item)
 
             m = whitespace.match(buf,pos)
             if m:
@@ -266,7 +272,7 @@ def parse_rson(buf, pos):
         elif name in ('base64', 'bytestring'):
             pass
         else:
-            raise SemanticErr(name, "has no meaning")
+            raise BadDecorator(name, "{} can't be used on strings".format(name))
 
         if chr == "'":
             m = string_sq.match(buf, pos)
@@ -298,12 +304,12 @@ def parse_rson(buf, pos):
                 else:
                     out = datetime.strptime(out, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
             else:
-                raise SemanticErr(name, out)
+                raise SemanticErr("invalid datetime: {}".format(out))
         elif name == 'float':
             if out.lower() in ('nan','-inf','+inf','inf'):
                 out = float(out)
             else:
-                raise SemanticErr(name, out)
+                raise SemanticErr("invalid float literal: {}".format(out))
         elif name not in (None, 'string', 'base64', 'bytestring'):
             out = decorate(name,  out)
 
@@ -313,7 +319,7 @@ def parse_rson(buf, pos):
         if name in (None, 'int', 'float', 'duration') or name not in builtin_decorators:
             pass
         else:
-            raise SemanticErr(name, "has no meaning")
+            raise BadDecorator(name, "{} can't be used on numbers".format(name))
 
         m = int_b16.match(buf, pos)
         if m:
@@ -380,12 +386,12 @@ def parse_rson(buf, pos):
 
         if name == 'object':
             if buf != 'null':
-                raise SemanticErr('object','must be null or {}')
+                raise BadDecorator('object','must be null or {}')
         elif name == 'bool':
             if buf not in ('true', 'false'): 
-                raise SemanticErr('bool','must be true or false')
+                raise BadDecorator('bool','must be true or false')
         elif name in builtin_decorators:
-            raise SemanticErr(name, "has no meaning")
+            raise BadDecorator(name, "{} can't be used on builtins".format(name))
         elif name is not None:
             out = decorate(name,  out)
 
