@@ -105,6 +105,20 @@ import io
 import base64
 
 
+class SyntaxErr(Exception):
+    def __init__(self, buf, pos):
+        self.buf = buf
+        self.pos = pos
+        Exception.__init__(self)
+
+class SemanticErr(Exception):
+    pass
+
+class BadDecorator(SemanticErr):
+    def __init__(self, name, reason):
+        self.name = name
+        SemanticErr.__init__(self,reason)
+
 whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
 int_b2 = re.compile(r"[-+]?0b[01][01_]*")
@@ -131,33 +145,37 @@ builtin_decorators = set("""
         set list dict object
 """.split())
 
-class SyntaxErr(Exception):
-    def __init__(self, buf, pos):
-        self.buf = buf
-        self.pos = pos
-        Exception.__init__(self)
-
-class SemanticErr(Exception):
-    pass
-
-class BadDecorator(SemanticErr):
-    def __init__(self, name, reason):
-        self.name = name
-        SemanticErr.__init__(self,reason)
+registered_decorators = OrderedDict() # names -> Classes (take name, value as args)
+registered_classes = OrderedDict() # classes -> undecorators (get name, value)
 
 class Decorated:
     def __init__(self, name, value):
         self.name = name
         self.value = value
 
+registered_classes[Decorated] = lambda obj: (obj.name, obj.value)
+
 def undecorate(obj):
-    if isinstance(obj, Decorated) and obj.name not in builtin_decorators:
-        return obj.name, obj.value
+   if obj.__class__ in registered_classes:
+        und = registered_classes[obj.__class__]
+        name, value = und(obj)
+   else:
+       raise SemanticErr("Can't undecorate {}: unknown class {}".format(obj, obj.__class__))
+
+   if name not in builtin_decorators:
+       return name, value
+   else:
+       raise BadDecorator(name,"Can't undecorate {}, as {} is reserved name".format(obj, name))
         
 def decorate(name, value):
     if name in builtin_decorators:
         raise BadDecorator(name, "{} is reserved".format(name))
-    return Decorated(name, value)
+
+    if name in registered_decorators:
+        dec = registered_decorators[name]
+        return dec(name, value)
+    else:
+        return Decorated(name, value)
 
 def parse_rson(buf, pos):
     m = whitespace.match(buf,pos)
@@ -428,25 +446,6 @@ def parse_rson_float(name, buf):
 
     return out
 
-def parse(buf):
-    obj, pos = parse_rson(buf, 0)
-
-    m = whitespace.match(buf,pos)
-    if m:
-        pos = m.end()
-        m = whitespace.match(buf,pos)
-
-    if pos != len(buf):
-        raise SyntaxErr(buf, pos)
-
-    return obj
-
-
-def dump(obj):
-    buf = io.StringIO('')
-    dump_rson(obj, buf)
-    return buf.getvalue()
-
 def dump_rson(obj,buf):
     if obj is True or obj is False or obj is None:
         buf.write(builtin_values[obj])
@@ -517,12 +516,31 @@ def dump_rson(obj,buf):
         buf.write('@duration {}'.format(obj.total_seconds()))
     else:
         nv = undecorate(obj)
-        if nv:
-            name, value = nv
-            buf.write('@{} '.format(name))
-            dump_rson(value, buf)
-        else:
-            raise Exception('no')
+        name, value = nv
+        buf.write('@{} '.format(name))
+        dump_rson(value, buf)
+
+def parse(buf):
+    obj, pos = parse_rson(buf, 0)
+
+    m = whitespace.match(buf,pos)
+    if m:
+        pos = m.end()
+        m = whitespace.match(buf,pos)
+
+    if pos != len(buf):
+        raise SyntaxErr(buf, pos)
+
+    return obj
+
+def dump(obj):
+    buf = io.StringIO('')
+    dump_rson(obj, buf)
+    return buf.getvalue()
+
+
+
+# Tests
 
 def test_parse(buf, obj):
     print(repr(buf), '->', obj)
@@ -537,6 +555,28 @@ def test_dump(obj, buf):
 
     if buf != out:
         raise AssertionError('{} != {}'.format(buf, out))
+
+def test_parse_err(buf, exc):
+    try:
+        obj = parse(buf)
+    except Exception as e:
+        if isinstance(e, exc):
+            return
+        else:
+            raise AssertionError('{} did not cause {}, but '.format(buf,exc,e))
+    else:
+        raise AssertionError('{} did not cause {}, parsed:{}'.format(buf,exc, obj))
+
+def test_dump_err(obj, exc):
+    try:
+        buf = dump(obj)
+    except Exception as e:
+        if isinstance(e, exc):
+            return
+        else:
+            raise AssertionError('{} did not cause {}, but '.format(obj,exc,e))
+    else:
+        raise AssertionError('{} did not cause {}, dumping: {}'.format(obj,exc, buf))
 
 def test_round(obj):
     buf0 = dump(obj)
@@ -587,8 +627,10 @@ def main():
     test_parse((3000000.0).hex(), 3000000.0)
     test_parse(hex(123), 123)
 
-
     test_dump(1,"1")
+    
+    test_dump_err(Decorated('float', 123), BadDecorator)
+    test_parse_err('@object "foo"', BadDecorator)
 
     for x in [
         0, -1, +1,
