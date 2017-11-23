@@ -12,9 +12,9 @@ RSON:
  - byte order mark is whitespace
  - any value as root object
  - use `#....` as comments
+ - new types through decorators: datetime, period, set, dict
  - decorators: tags on existing values: `@float "NaN"` `@set [1,2,3,]`
  - all built in types have names reserved, used for special values
- - new types through decorators: datetime, period, set, dict
  - optional complex type
 
 RSON strings:
@@ -68,9 +68,32 @@ RSON complex numbers: (optional)
 
 RSON decorated objects:
  - whitespace between decorator name and object is *mandatory*
- - `@int 1`, `@string "two"` are just `1` and `"two"`
  - `@foo.foo {"foo":1}` any unicode letter/digit, or a .
+ - `@int 1`, `@string "two"` are just `1` and `"two"`
  - parsers may reject unknown, or return a wrapped object 
+
+Standard Decorators:
+ - `@bool` on true, or false
+ - `@complex` on null
+
+ - @int, @float on numbers
+ - @duration on numbers
+
+ - @string on strings
+ - @float on strings, for NaN, -Inf, +Inf only
+ - @datetime on strings
+ - @base64 / @bytestring on strings
+
+ - @set on lists
+ - @complex on lists
+ - @list on lists
+
+ - @object on objects
+ - @dict on objects
+
+ - use of @bool, @int, @float, @complex, @string, @bytestring, @base64,
+   @duration, @datetime, @set, @list, @dict, @object on other values
+   is an error
 
 """
 
