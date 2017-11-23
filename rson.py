@@ -33,10 +33,11 @@ RSON lists:
  - allow trailing commas
 
 RSON objects:
- - like JSON, string only keys
  - no duplicate keys
  - insertion order must be preserved
  - allow trailing commas
+ - implementations MUST support string keys
+ - MAY support number keys
 
 RSON decorated objects:
  - allow objects to be 'decorated', via a named tag
@@ -49,7 +50,7 @@ RSON decorated objects:
 
  - parsers may reject unknown, or return a wrapped object 
 
-RSON float strings (optional):
+RSON C99 float strings (optional):
  - `@float "0x0p0"` C99 style, sprintf('%a') format
  - `@float "NaN"` or nan,Inf,inf,+Inf,-Inf,+inf,-inf
  -  no underscores
@@ -60,19 +61,20 @@ RSON sets (optional):
  - no duplicate items
 
 RSON dicts (optional):
- - `@dict {"a":1}` or `@dict [["a",1],...]`
- - keys must be in lexical order
+ - `@dict {"a":1}`
+ - keys must be in lexical order, must round trip in same order.
  - keys must be comparable, (usually means same type, all string, all number)
 
 RSON datetimes/periods (optional):
  - `@datetime "2017-11-22T23:32:07.100497Z"`
  - `@duration 60` (in seconds)
- - UTC must be supported, using `Z` prefix
- - MAY support RFC 3339
+ - UTC MUST be supported, using `Z` prefix
+ - implementations MAY support RFC 3339
 
 RSON bytestrings (optional):
- - `@bytestring "....\xff"` (cannot have codepoints outside ascii printable)
+ - `@bytestring "....\xff"` 
  - `@base64 "...=="` returns a bytestring if possible
+ - can't have escapes/characters > \xFF
 
 RSON complex numbers: (optional)
  - `@complex [0,1]`
@@ -80,25 +82,21 @@ RSON complex numbers: (optional)
 RSON Reserved Decorators:
  - `@bool` on true, or false
  - `@object` on null
-
  - @int on ints, @float on numbers
- - @duration on numbers
-
  - @string on strings
- - @float on strings, for Hex floats, NaN, -Inf, +Inf only
- - @datetime on strings
- - @base64 / @bytestring on strings (all non printable ascii must be \xFF escaped)
+ - @list on lists
+ - @object on objects
 
+ - @float on strings (for C99 hex floats, NaN, -Inf, +Inf)
+ - @duration on numbers (seconds)
+ - @datetime on strings (utc timestamp)
+ - @base64 / @bytestring on strings 
  - @set on lists
  - @complex on lists
- - @list on lists
+ - @dict on objects, lists
 
- - @object on objects
- - @dict on objects
-
- - use of @bool, @int, @float, @complex, @string, @bytestring, @base64,
-   @duration, @datetime, @set, @list, @dict, @object on other values
-   is an error
+ - other uses of  @bool, @int, @float, @complex, @string, @bytestring, @base64,
+   @duration, @datetime, @set, @list, @dict, @object is an error
 
 """
 
@@ -142,7 +140,7 @@ identifier = re.compile(r"(?!\d)[\w\.]+")
 
 c99_flt = re.compile(r"NaN|nan|[-+]?Inf|[-+]?inf|[-+]?0x[0-9a-fA-F][0-9a-fA-F]*\.[0-9a-fA-F]+[pP](?:\+|-)?[\d]+")
 
-escapes = {
+str_escapes = {
     'b':'\b',
     'n':'\n',
     'f':'\f',
@@ -165,6 +163,19 @@ byte_escapes = {
     "'":b"'",
     '\\':b'\\',
 }
+
+escaped = {
+    '\b':'\\b',
+    '\n':'\\n',
+    '\f':'\\f',
+    '\r':'\\r',
+    '\t':'\\t',
+    '"':'\\"',
+    "'":"\\'",
+    '\\':'\\\\',
+}
+
+
 
 builtin_names = {'null':None,'true':True,'false':False}
 builtin_values = {None:'null',True:'true',False: 'false'}
@@ -356,11 +367,11 @@ def parse_rson(buf, pos):
                 s.write(buf[lo:hi])
 
             esc = buf[hi+1]
-            if esc in escapes:
+            if esc in str_escapes:
                 if ascii:
                     s.extend(byte_escapes[esc])
                 else:
-                    s.write(escapes[esc])
+                    s.write(str_escapes[esc])
                 lo = hi + 2
             elif esc == 'x':
                 n = int(buf[hi+2:hi+4],16)
@@ -554,7 +565,15 @@ def dump_rson(obj,buf):
     if obj is True or obj is False or obj is None:
         buf.write(builtin_values[obj])
     elif isinstance(obj, str):
-        buf.write(repr(obj)) #fix escapes
+        buf.write('"')
+        for c in obj:
+            if c in escaped:
+                buf.write(escaped)
+            elif ord(c) < 0x20:
+                buf.write('\\x{:02X}'.format(ord(c)))
+            else:
+                buf.write(c)
+        buf.write('"')
     elif isinstance(obj, int):
         buf.write(str(obj))
     elif isinstance(obj, float):
