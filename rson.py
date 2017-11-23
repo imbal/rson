@@ -51,7 +51,7 @@ RSON sets:
 RSON dicts:
  - `@dict {"a":1}` or `@dict [["a",1],...]`
  - keys must be in lexical order
- - keys must be same type, all string, all number
+ - keys must be comparable, (usually means same type, all string, all number)
 
 RSON datetimes/periods:
  - `@datetime "2017-11-22T23:32:07.100497Z"`
