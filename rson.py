@@ -852,7 +852,7 @@ def main():
         -0.0, +0.0, 1.9,
         True, False, None,
         "str", b"bytes",
-        [1,2,3], {"a":1}, set([1,2,3]), OrderedDict(a=1,b=2),
+        [1,2,3], {"c":3,"a":1,"b":2,}, set([1,2,3]), OrderedDict(a=1,b=2),
         1+2j,float('NaN'),
         datetime.now().astimezone(timezone.utc),
          timedelta(seconds=666),
