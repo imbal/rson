@@ -145,83 +145,14 @@ class Decorated:
         self.name = name
         self.value = value
 
-def decorate_object(name, item):
-    if name == 'object':
-        return item
-    elif name == 'dict':
-        return dict(item)
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_list(name, item):
-    if name == 'list':
-        return item
-    elif name == 'set':
-        out = set()
-        for x in item:
-            if x in out:
-                raise SemanticErr('duplicate', x)
-            out.add(x)
-        return out
-    elif name == 'complex':
-        return complex(item[0], item[1])
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_string(name, item):
-    if name == 'string':
-        return item
-    elif name == 'bytestring':
-        return item.encode('latin-1')
-    elif name == 'base64':
-        return base64.standard_b64decode(item)
-    elif name == 'datetime':
-        if item[-1].lower() == 'z':
-            if '.' in item:
-                date, sec = item[:-1].split('.')
-                date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-                sec = float("0."+sec)
-                return date + timedelta(seconds=sec)
-            else:
-                return datetime.strptime(item, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
-        else:
-            raise SemanticErr(name, item)
-
-    elif name == 'float':
-        if item.lower() in ('nan','-inf','+inf','inf'):
-            return float(item)
-        else:
-            raise SemanticErr(name, item)
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_number(name, item):
-    if name == 'int':
-        return int(item)
-    elif name == 'float':
-        return float(item)
-    elif name == 'duration':
-        return timedelta(seconds=item)
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
-
-def decorate_builtin(name, item):
-    if name == 'bool' and item in (True,False):
-        return item
-    elif name == 'object' and item is None:
-        return item
-    elif name in builtin_decorators:
-        raise SemanticErr(name, item)
-    else:
-        return Decorated(name, item)
+def undecorate(obj):
+    if isinstance(obj, Decorated) and obj.name not in builtin_decorators:
+        return obj.name, obj.value
+        
+def decorate(name, value):
+    if name in builtin_decorators:
+        raise SemanticErr(name, value)
+    return Decorated(name, value)
 
 def parse_rson(buf, pos):
     m = whitespace.match(buf,pos)
@@ -389,6 +320,84 @@ def parse_rson(buf, pos):
 
     raise SyntaxErr(buf, pos)
 
+def decorate_object(name, item):
+    if name == 'object':
+        return item
+    elif name == 'dict':
+        # XXX: create this ahead of time
+        return dict(item)
+    elif name in builtin_decorators:
+        raise SemanticErr(name, item)
+    else:
+        return Decorated(name, item)
+
+def decorate_list(name, item):
+    if name == 'list':
+        return item
+    elif name == 'set':
+        out = set()
+        for x in item:
+            if x in out:
+                raise SemanticErr('duplicate', x)
+            out.add(x)
+        return out
+    elif name == 'complex':
+        return complex(item[0], item[1])
+    elif name in builtin_decorators:
+        raise SemanticErr(name, item)
+    else:
+        return Decorated(name, item)
+
+def decorate_string(name, item):
+    if name == 'string':
+        return item
+    elif name == 'bytestring':
+        return item.encode('latin-1')
+    elif name == 'base64':
+        return base64.standard_b64decode(item)
+    elif name == 'datetime':
+        if item[-1].lower() == 'z':
+            if '.' in item:
+                date, sec = item[:-1].split('.')
+                date = datetime.strptime(date, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+                sec = float("0."+sec)
+                return date + timedelta(seconds=sec)
+            else:
+                return datetime.strptime(item, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        else:
+            raise SemanticErr(name, item)
+
+    elif name == 'float':
+        if item.lower() in ('nan','-inf','+inf','inf'):
+            return float(item)
+        else:
+            raise SemanticErr(name, item)
+    elif name in builtin_decorators:
+        raise SemanticErr(name, item)
+    else:
+        return Decorated(name, item)
+
+def decorate_number(name, item):
+    if name == 'int':
+        return int(item)
+    elif name == 'float':
+        return float(item)
+    elif name == 'duration':
+        return timedelta(seconds=item)
+    elif name in builtin_decorators:
+        raise SemanticErr(name, item)
+    else:
+        return Decorated(name, item)
+
+def decorate_builtin(name, item):
+    if name == 'bool' and item in (True,False):
+        return item
+    elif name == 'object' and item is None:
+        return item
+    elif name in builtin_decorators:
+        raise SemanticErr(name, item)
+    else:
+        return Decorated(name, item)
 
 def parse_rson_string(name, buf):
     # XXX: replace escapes properly.
@@ -419,7 +428,6 @@ def parse(buf):
         m = whitespace.match(buf,pos)
 
     if pos != len(buf):
-        print(buf[pos:])
         raise SyntaxErr(buf, pos)
 
     return obj
@@ -432,7 +440,6 @@ def dump(obj):
 
 def dump_rson(obj,buf):
     if obj is True or obj is False or obj is None:
-        print(obj, builtin_values)
         buf.write(builtin_values[obj])
     elif isinstance(obj, str):
         buf.write(repr(obj)) #fix escapes
@@ -499,11 +506,14 @@ def dump_rson(obj,buf):
         buf.write('@datetime "{}"'.format(obj.strftime("%Y-%m-%dT%H:%M:%S.%fZ")))
     elif isinstance(obj, timedelta):
         buf.write('@duration {}'.format(obj.total_seconds()))
-    elif isinstance(obj, Decorated):
-        buf.write('@{} '.format(obj.name))
-        dump_rson(obj.value, buf)
     else:
-        raise Exception('no')
+        nv = undecorate(obj)
+        if nv:
+            name, value = nv
+            buf.write('@{} '.format(name))
+            dump_rson(value, buf)
+        else:
+            raise Exception('no')
 
 def test_parse(buf, obj):
     print(repr(buf), '->', obj)
@@ -520,11 +530,23 @@ def test_dump(obj, buf):
         raise AssertionError('{} != {}'.format(buf, out))
 
 def test_round(obj):
-    buf = dump(obj)
-    print(obj, 'dumps to',repr(buf))
-    out = parse(buf)
-    if (obj != obj and out == out) or (obj == obj and obj != out):
-        raise AssertionError('{} != {}'.format(obj, out))
+    buf0 = dump(obj)
+    obj1 = parse(buf0)
+    buf1 = dump(obj1)
+
+    out = parse(buf1)
+    print(obj)
+
+    if obj != obj:
+        if buf0 != buf1 or obj1 == obj1 or out == out:
+            raise AssertionError('{} != {}'.format(obj, out))
+    else:
+        if buf0 != buf1:
+            raise AssertionError('buf {} != {}'.format(buf0, buf1))
+        if obj != obj1:
+            raise AssertionError('buf {} != {}'.format(obj, obj1))
+        if obj != out:
+            raise AssertionError('buf {} != {}'.format(obj, out))
         
 def main():
     test_parse("0",0)
