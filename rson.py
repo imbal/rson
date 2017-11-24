@@ -771,22 +771,26 @@ def djson_dump_file(obj, fh):
 
 # rbox - framing format for rson objects
 # <type> <length> <name> <newline> <payload> <newline> end <checksum> <newline>
-# 
+#
 
 class rbox:
     # type, length, name, payload, checksum
     pass
 
+
 class rboxIo:
     pass
 
+
 def open_rbox(filename):
     pass
+
 
 def parse_box(buf):
     pass
 
 # Tests
+
 
 def test_parse(buf, obj):
     out = parse(buf)
