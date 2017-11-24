@@ -17,8 +17,7 @@ RSON:
  - optional types through decorators: datetime, period, set, dict, complex
 
 RSON strings:
- - \UFFFFFFFF \xFF \' escapes
- - \xFF is \u00FF
+ - \UFFFFFFFF  \' escapes
  - use ''s or ""s
  - \ at end of line is continuation
 
@@ -74,7 +73,7 @@ RSON datetimes/periods (optional):
 RSON bytestrings (optional):
  - `@bytestring "....\xff"` 
  - `@base64 "...=="` returns a bytestring if possible
- - can't have escapes/characters > \xFF
+ - can't have \u \U escapes, all controll/non ascii characters must be escaped: \xFF
 
 RSON complex numbers: (optional)
  - `@complex [0,1]`
@@ -425,22 +424,14 @@ def parse_rson(buf, pos):
             elif esc == 'u':
                 n = int(buf[hi + 2:hi + 6], 16)
                 if ascii:
-                    if n > 0xFF:
-                        raise SemanticErr('bytestring cannot have unicode')
-                    else:
-                        s.append(n)
-                else:
-                    s.write(chr(n))
+                    raise SemanticErr('bytestring cannot have unicode')
+                s.write(chr(n))
                 lo = hi + 6
             elif esc == 'U':
                 n = int(buf[hi + 2:hi + 10], 16)
                 if ascii:
-                    if n > 0xFF:
-                        raise SemanticErr('bytestring cannot have unicode')
-                    else:
-                        s.append(n)
-                else:
-                    s.write(chr(n))
+                    raise SemanticErr('bytestring cannot have unicode')
+                s.write(chr(n))
                 lo = hi + 10
             elif esc == '\n':
                 lo = hi + 2
@@ -701,8 +692,7 @@ def djson_object_pairs_hook(pairs):
     if k == 'base64':
         return base64.standard_b64decode(v)
     if k == 'bytestring':
-        return v.encode('latin-1')
-
+        raise SemanticErr('no')
     if k == 'set':
         return set(v)
     if k == 'list':
@@ -778,6 +768,23 @@ def djson_dump_file(obj, fh):
     obj = djson_wrap(obj)
     return json.dump(obj, fh)
 
+
+# rbox - framing format for rson objects
+# <type> <length> <name> <newline> <payload> <newline> end <checksum> <newline>
+# 
+
+class rbox:
+    # type, length, name, payload, checksum
+    pass
+
+class rboxIo:
+    pass
+
+def open_rbox(filename):
+    pass
+
+def parse_box(buf):
+    pass
 
 # Tests
 
