@@ -67,7 +67,7 @@ RSON dicts (optional):
 RSON datetimes/periods (optional):
  - `@datetime "2017-11-22T23:32:07.100497Z"`
  - `@duration 60` (in seconds)
- - UTC MUST be supported, using `Z` prefix
+ - UTC MUST be supported, using `Z` suffix
  - implementations MAY support RFC 3339
 
 RSON bytestrings (optional):
