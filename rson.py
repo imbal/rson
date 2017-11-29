@@ -338,17 +338,22 @@ def parse_rson(buf, pos):
         return out, pos + 1
 
     elif peek == '[':
-        if name in (None, 'list', 'complex'):
-            out = []
-        elif name == 'set':
+        if name in builtin_decorators:
+            if name not in ('list', 'set', 'complex'):
+                raise ParserErr(
+                    buf, pos, "{} can't be used on lists".format(name))
+
+        if name == 'set':
             out = set()
-        elif name in builtin_decorators:
-            raise ParserErr(buf, pos, "{} can't be used on lists".format(name))
+        else:
+            out = []
 
         pos += 1
+
         m = whitespace.match(buf, pos)
         if m:
             pos = m.end()
+
         while buf[pos] != ']':
             item, pos = parse_rson(buf, pos)
             if name == 'set':
@@ -372,11 +377,17 @@ def parse_rson(buf, pos):
             elif peek != ']':
                 raise ParserErr(
                     buf, pos, "Expecting a ',', or a ']' but found {}".format(repr(peek)))
-        if name == 'complex':
+
+        pos+=1
+
+        if name in (None, 'list', 'set'):
+            pass
+        elif name == 'complex':
             out = complex(*out)
-        elif name not in (None, 'list', 'set'):
+        else:
             out = decorate(name,  out)
-        return out, pos + 1
+            
+        return out, pos 
 
     elif peek == "'" or peek == '"':
         if name in builtin_decorators:
