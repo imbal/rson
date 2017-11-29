@@ -122,21 +122,25 @@ import io
 import base64
 import json
 
+
 class ParserErr(Exception):
     def __init__(self, buf, pos, reason=None):
         self.buf = buf
         self.pos = pos
         if reason is None:
-            nl = buf.rfind(' ',pos-10, pos)
+            nl = buf.rfind(' ', pos - 10, pos)
             if nl < 0:
-                nl = pos-5  
-            reason = "Unknown Character {} (context: {})".format(repr(buf[pos]),repr(buf[pos-10:pos+5]))
+                nl = pos - 5
+            reason = "Unknown Character {} (context: {})".format(
+                repr(buf[pos]), repr(buf[pos - 10:pos + 5]))
         Exception.__init__(self, "{} (at pos={})".format(reason, pos))
+
 
 class BadDecorator(Exception):
     def __init__(self, name, reason):
         self.name = name
         Exception.__init__(self, reason)
+
 
 whitespace = re.compile(r"(?:\ |\t|\uFEFF|\r|\n|#[^\r\n]*(?:\r?\n|$))+")
 
@@ -283,13 +287,13 @@ def parse_rson(buf, pos):
     elif peek == '{':
         if name in builtin_decorators:
             if name not in ('object', 'dict'):
-                raise ParserErr(buf, pos, "{} can't be used on objects".format(name))
+                raise ParserErr(
+                    buf, pos, "{} can't be used on objects".format(name))
 
         if name == 'dict':
             out = dict()
         else:
             out = OrderedDict()
-
 
         pos += 1
         m = whitespace.match(buf, pos)
@@ -313,7 +317,8 @@ def parse_rson(buf, pos):
                 if m:
                     pos = m.end()
             else:
-                raise ParserErr(buf, pos, "Expected key:value pair but found {}".format(repr(peek)))
+                raise ParserErr(
+                    buf, pos, "Expected key:value pair but found {}".format(repr(peek)))
 
             item, pos = parse_rson(buf, pos)
 
@@ -326,7 +331,8 @@ def parse_rson(buf, pos):
                 if m:
                     pos = m.end()
             elif peek != '}':
-                raise ParserErr(buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
+                raise ParserErr(
+                    buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
         if name not in (None, 'object', 'dict'):
             out = decorate(name,  out)
         return out, pos + 1
@@ -364,7 +370,8 @@ def parse_rson(buf, pos):
                 if m:
                     pos = m.end()
             elif peek != ']':
-                raise ParserErr(buf, pos, "Expecting a ',', or a ']' but found {}".format(repr(peek)))
+                raise ParserErr(
+                    buf, pos, "Expecting a ',', or a ']' but found {}".format(repr(peek)))
         if name == 'complex':
             out = complex(*out)
         elif name not in (None, 'list', 'set'):
@@ -373,8 +380,9 @@ def parse_rson(buf, pos):
 
     elif peek == "'" or peek == '"':
         if name in builtin_decorators:
-            if name not in ('string','float','datetime','bytestring','base64'):
-                raise ParserErr(buf,pos, "{} can't be used on strings".format(name))
+            if name not in ('string', 'float', 'datetime', 'bytestring', 'base64'):
+                raise ParserErr(
+                    buf, pos, "{} can't be used on strings".format(name))
 
         if name == 'bytestring':
             s = bytearray()
@@ -442,7 +450,8 @@ def parse_rson(buf, pos):
             elif (buf[hi + 1:hi + 3] == '\r\n'):
                 lo = hi + 3
             else:
-                raise ParserErr(buf, hi, "Unkown escape character {}".format(repr(esc)))
+                raise ParserErr(
+                    buf, hi, "Unkown escape character {}".format(repr(esc)))
 
         if name == 'bytestring':
             out = s
@@ -455,18 +464,20 @@ def parse_rson(buf, pos):
                 try:
                     out = base64.standard_b64decode(out)
                 except Exception as e:
-                    raise ParserErr(buf,pos, "Invalid base64") from e
+                    raise ParserErr(buf, pos, "Invalid base64") from e
             elif name == 'datetime':
                 try:
                     out = parse_datetime(out)
                 except Exception as e:
-                    raise ParserErr(buf,pos, "Invalid datetime: {}".format(repr(out))) from e
+                    raise ParserErr(
+                        buf, pos, "Invalid datetime: {}".format(repr(out))) from e
             elif name == 'float':
                 m = c99_flt.match(out)
                 if m:
                     out = float.fromhex(out)
                 else:
-                    raise ParserErr(buf, pos, "invalid C99 float literal: {}".format(out))
+                    raise ParserErr(
+                        buf, pos, "invalid C99 float literal: {}".format(out))
             else:
                 out = decorate(name,  out)
 
@@ -475,7 +486,8 @@ def parse_rson(buf, pos):
     elif peek in "-+0123456789":
         if name in builtin_decorators:
             if name not in ('int', 'float', 'duration'):
-                raise ParserErr(buf, pos,"{} can't be used on numbers".format(name))
+                raise ParserErr(
+                    buf, pos, "{} can't be used on numbers".format(name))
 
         flt_end = None
         exp_end = None
@@ -495,7 +507,8 @@ def parse_rson(buf, pos):
                 if m:
                     end = m.end()
                 else:
-                    raise ParserErr(buf, pos, "Invalid hexadecimal number (0x...)")
+                    raise ParserErr(
+                        buf, pos, "Invalid hexadecimal number (0x...)")
             elif peek == '0o':
                 base = 8
                 m = int_b8.match(buf, pos)
@@ -509,7 +522,8 @@ def parse_rson(buf, pos):
                 if m:
                     end = m.end()
                 else:
-                    raise ParserErr(buf, pos, "Invalid hexadecimal number (0x...)")
+                    raise ParserErr(
+                        buf, pos, "Invalid hexadecimal number (0x...)")
 
             out = sign * int(buf[pos + 2:end].replace('_', ''), base)
         else:
@@ -539,7 +553,8 @@ def parse_rson(buf, pos):
             out = timedelta(seconds=out)
         elif name == 'int':
             if flt_end or exp_end:
-                raise ParserErr(buf, pos, "Can't decorate floating point with @int")
+                raise ParserErr(
+                    buf, pos, "Can't decorate floating point with @int")
         elif name == 'float':
             if not isintance(out, float):
                 out = float(out)
@@ -557,18 +572,21 @@ def parse_rson(buf, pos):
             raise ParserErr(buf, pos)
 
         if item not in builtin_names:
-            raise ParserErr(buf, pos, "{} is not a recognised built-in".format(repr(name)))
+            raise ParserErr(
+                buf, pos, "{} is not a recognised built-in".format(repr(name)))
 
         out = builtin_names[item]
 
         if name == 'object':
             if item != 'null':
-                raise ParserErr(buf, pos, '@object can only decorate null or {}')
+                raise ParserErr(
+                    buf, pos, '@object can only decorate null or {}')
         elif name == 'bool':
             if item not in ('true', 'false'):
-                raise ParserErr(buf,pos, '@bool can only true or false')
+                raise ParserErr(buf, pos, '@bool can only true or false')
         elif name in builtin_decorators:
-            raise ParserErr(buf, pos, "{} has no meaning for {}".format(repr(name), item) )
+            raise ParserErr(
+                buf, pos, "{} has no meaning for {}".format(repr(name), item))
         elif name is not None:
             out = decorate(name,  out)
 
@@ -586,7 +604,8 @@ def parse(buf):
         m = whitespace.match(buf, pos)
 
     if pos != len(buf):
-        raise ParserErr(buf, pos, "Trailing content: {}".format(repr(buf[pos:pos+10])))
+        raise ParserErr(buf, pos, "Trailing content: {}".format(
+            repr(buf[pos:pos + 10])))
 
     return obj
 
@@ -692,6 +711,7 @@ true, false, null ~> true, false, null
 @bytestring "..." ~> {'base64':'....'}
 """
 
+
 def djson_parse(buf):
     return json.loads(buf, object_pairs_hook=djson_object_pairs_hook)
 
@@ -708,7 +728,6 @@ def djson_parse_file(fh):
 def djson_dump_file(obj, fh):
     obj = djson_wrap(obj)
     return json.dump(obj, fh)
-
 
 
 def djson_object_pairs_hook(pairs):
@@ -781,14 +800,15 @@ def djson_wrap(obj):
     else:
         v = undecorate(obj)
         if not v:
-            raise NotImplementedError("Don't know how to wrap {}, {}".format(obj.__class__, obj))
+            raise NotImplementedError(
+                "Don't know how to wrap {}, {}".format(obj.__class__, obj))
         name, value = obj
         return {name: djson_wrap(value)}
 
 
 # rbox - framing format for rson objects
-#   <record type> <length> <name> <newline> 
-#   <payload> <newline> 
+#   <record type> <length> <name> <newline>
+#   <payload> <newline>
 #   end <checksum> <newline>
 #
 # for a log/stream of objects
