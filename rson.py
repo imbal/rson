@@ -376,7 +376,7 @@ def parse_rson(buf, pos):
             if name not in ('string','float','datetime','bytestring','base64'):
                 raise ParserErr(buf,pos, "{} can't be used on strings".format(name))
 
-        if name in ('base64', 'bytestring'):
+        if name == 'bytestring':
             s = bytearray()
             ascii = True
         else:
@@ -444,24 +444,30 @@ def parse_rson(buf, pos):
             else:
                 raise ParserErr(buf, hi, "Unkown escape character {}".format(repr(esc)))
 
-        if name == 'base64':
-            out = base64.standard_b64decode(s)
-        elif name == 'bytestring':
+        if name == 'bytestring':
             out = s
         else:
             out = s.getvalue()
 
-            if name == 'datetime':
-                old, out = out, parse_datetime(out)
-                if not out:
-                    raise SemanticErr("invalid datetime: {}".format(out))
+            if name is None or name == 'string':
+                pass
+            elif name == 'base64':
+                try:
+                    out = base64.standard_b64decode(out)
+                except Exception as e:
+                    raise ParserErr(buf,pos, "Invalid base64") from e
+            elif name == 'datetime':
+                try:
+                    out = parse_datetime(out)
+                except Exception as e:
+                    raise ParserErr(buf,pos, "Invalid datetime: {}".format(repr(out))) from e
             elif name == 'float':
                 m = c99_flt.match(out)
                 if m:
                     out = float.fromhex(out)
                 else:
-                    raise SemanticErr(buf, pos, "invalid C99 float literal: {}".format(out))
-            elif name not in (None, 'string', 'base64', 'bytestring'):
+                    raise ParserErr(buf, pos, "invalid C99 float literal: {}".format(out))
+            else:
                 out = decorate(name,  out)
 
         return out, end
