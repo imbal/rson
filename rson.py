@@ -766,7 +766,6 @@ def djson_object_pairs_hook(pairs):
         return float.fromhex(v)
     if k == 'complex':
         return complex(*v)
-
     if k == 'string':
         return v
     if k == 'base64':
@@ -779,12 +778,10 @@ def djson_object_pairs_hook(pairs):
         return v
     if k == 'dict':
         return dict(v)
+    if k == 'record':
+        return OrderedDict(v)
     if k == 'object':
-        if v is not None:
-            return OrderedDict(v)
-        else:
-            return None
-
+        return v
     if k == 'datetime':
         return parse_datetime(v)
     if k == 'duration':
@@ -811,7 +808,7 @@ def djson_wrap(obj):
     elif isinstance(obj, set):
         return {'set': [djson_wrap(x) for x in obj]}
     elif isinstance(obj, OrderedDict):
-        return {'object': [(djson_wrap(x), djson_wrap(y)) for x, y in obj.items()]}
+        return {'record': [(djson_wrap(x), djson_wrap(y)) for x, y in obj.items()]}
     elif isinstance(obj, dict):
         out = []
         for x in sorted(obj.keys()):
