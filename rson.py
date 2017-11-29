@@ -17,6 +17,16 @@ RSON:
  - decorators: tags on existing values: `@a.name [1,2,3]` 
  - optional types through decorators: datetime, period, set, dict, complex
 
+RSON objects:
+ - null
+ - true, false
+ - integers
+ - floating point
+ - strings
+ - lists
+ - records
+ - decorated objects
+
 RSON strings: 
  - \xFF as \u00FF
  - \UFFFFFFFF  \' escapes
@@ -25,8 +35,9 @@ RSON strings:
  - no surrogate pairs
 
 RSON numbers:
- - allow leading zero, underscores (except leading digits)
  - allow unary minus, plus
+ - allow leading zero
+ - allow underscores (except leading digits)
  - binary ints: 0b1010
  - octal ints: 0o777
  - hex ints: 0xFF 
@@ -34,22 +45,21 @@ RSON numbers:
 RSON lists:
  - allow trailing commas
 
-RSON objects:
+RSON records (aka, JSON objects):
  - no duplicate keys
  - insertion order must be preserved
  - allow trailing commas
  - implementations MUST support string keys
- - MAY support number keys
 
 RSON decorated objects:
+ - `@foo.foo {"foo":1}` name is any unicode letter/digit, or a .
+ - `@int 1`, `@string "two"` are just `1` and `"two"`
+
  - allow objects to be 'decorated', via a named tag
  - whitespace between decorator name and object is *mandatory*
  - do not nest
 
  - all built in types have names reserved, used for special values
- - `@foo.foo {"foo":1}` name is any unicode letter/digit, or a .
- - `@int 1`, `@string "two"` are just `1` and `"two"`
-
  - parsers may reject unknown, or return a wrapped object 
 
 RSON C99 float strings (optional):
@@ -63,9 +73,9 @@ RSON sets (optional):
  - no duplicate items
 
 RSON dicts (optional):
- - `@dict {"a":1}`
+ - `@dict {"a":1}` 
  - keys must be in lexical order, must round trip in same order.
- - keys must be comparable, (usually means same type, all string, all number)
+ - keys must be comparable
 
 RSON datetimes/periods (optional):
  - `@datetime "2017-11-22T23:32:07.100497Z"`
@@ -84,8 +94,8 @@ RSON complex numbers: (optional)
  - `@complex [0,1]`
 
 RSON Reserved Decorators:
+ - `@object` on any (is a pass through)
  - `@bool` on true, or false
- - `@object` on null
  - @int on ints, @float on numbers
  - @string on strings
  - @list on lists
@@ -97,10 +107,13 @@ RSON Reserved Decorators:
  - @base64 / @bytestring on strings 
  - @set on lists
  - @complex on lists
- - @dict on objects
+ - @dict on records
+ - @record on records, or lists
+ - @table on records, or lists
 
  - other uses of  @bool, @int, @float, @complex, @string, @bytestring, @base64,
-   @duration, @datetime, @set, @list, @dict, @object is an error
+   @duration, @datetime, @set, @list, @dict, @record is an error
+ - @object is always fine
 
 Appendix: Decorated JSON
 
@@ -231,6 +244,8 @@ def undecorate(obj):
         raise SemanticErr(
             "Can't undecorate {}: unknown class {}".format(obj, obj.__class__))
 
+    if name == 'object':
+        return None, value
     if name not in builtin_decorators:
         return name, value
     else:
@@ -286,7 +301,7 @@ def parse_rson(buf, pos):
 
     elif peek == '{':
         if name in builtin_decorators:
-            if name not in ('object', 'dict'):
+            if name not in ('object', 'record', 'dict'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on objects".format(name))
 
@@ -333,13 +348,13 @@ def parse_rson(buf, pos):
             elif peek != '}':
                 raise ParserErr(
                     buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
-        if name not in (None, 'object', 'dict'):
+        if name not in (None, 'object', 'record', 'dict'):
             out = decorate(name,  out)
         return out, pos + 1
 
     elif peek == '[':
         if name in builtin_decorators:
-            if name not in ('list', 'set', 'complex'):
+            if name not in ('object', 'list', 'set', 'complex'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on lists".format(name))
 
@@ -380,7 +395,7 @@ def parse_rson(buf, pos):
 
         pos+=1
 
-        if name in (None, 'list', 'set'):
+        if name in (None, 'object', 'list', 'set'):
             pass
         elif name == 'complex':
             out = complex(*out)
@@ -391,7 +406,7 @@ def parse_rson(buf, pos):
 
     elif peek == "'" or peek == '"':
         if name in builtin_decorators:
-            if name not in ('string', 'float', 'datetime', 'bytestring', 'base64'):
+            if name not in ('object', 'string', 'float', 'datetime', 'bytestring', 'base64'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on strings".format(name))
 
@@ -469,7 +484,7 @@ def parse_rson(buf, pos):
         else:
             out = s.getvalue()
 
-            if name is None or name == 'string':
+            if name in (None, 'string', 'object'):
                 pass
             elif name == 'base64':
                 try:
@@ -496,7 +511,7 @@ def parse_rson(buf, pos):
 
     elif peek in "-+0123456789":
         if name in builtin_decorators:
-            if name not in ('int', 'float', 'duration'):
+            if name not in ('object', 'int', 'float', 'duration'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on numbers".format(name))
 
@@ -560,7 +575,9 @@ def parse_rson(buf, pos):
             else:
                 out = sign * int(buf[pos:end].replace('_', ''), 10)
 
-        if name == 'duration':
+        if name is None or name == 'object':
+            pass
+        elif name == 'duration':
             out = timedelta(seconds=out)
         elif name == 'int':
             if flt_end or exp_end:
@@ -569,8 +586,8 @@ def parse_rson(buf, pos):
         elif name == 'float':
             if not isintance(out, float):
                 out = float(out)
-        elif name is not None:
-            out = decorate(out)
+        else:
+            out = decorate(name, out)
 
         return out, end
 
@@ -588,17 +605,15 @@ def parse_rson(buf, pos):
 
         out = builtin_names[item]
 
-        if name == 'object':
-            if item != 'null':
-                raise ParserErr(
-                    buf, pos, '@object can only decorate null or {}')
+        if name is None or name == 'object':
+            pass
         elif name == 'bool':
             if item not in ('true', 'false'):
                 raise ParserErr(buf, pos, '@bool can only true or false')
         elif name in builtin_decorators:
             raise ParserErr(
                 buf, pos, "{} has no meaning for {}".format(repr(name), item))
-        elif name is not None:
+        else:
             out = decorate(name,  out)
 
         return out, end
@@ -821,14 +836,19 @@ def djson_wrap(obj):
 #   <record type> <length> <name> <newline>
 #   <payload> <newline>
 #   end <checksum> <newline>
-#
 # for a log/stream of objects
-# payload shoud be rson, but can be bytes or perhaps base64
-# intent that record type indicates content
 
 class rbox:
-    # type, length, name, payload, checksum
-    pass
+    def __init__(self, rtype, rkey, rvalue):
+        self.rtype = rtype
+        self.rkey = rkey
+        self.rvalue = rvalue
+
+    def dump_fh(self, fh):
+        fh.write(self.rtype)
+        fh.write(' ')
+        buf = dump(self.rvalue).encode('utf-8')
+        fh.write(len(buf))
 
 
 class rboxIo:
@@ -944,11 +964,12 @@ def main():
     test_parse("@bytestring 'fo\x20o'", b"fo o")
     test_parse("@float '{}'".format((3000000.0).hex()), 3000000.0)
     test_parse(hex(123), 123)
+    test_parse('@object "foo"', "foo")
+    test_parse('@object 12',12)
 
     test_dump(1, "1")
 
     test_dump_err(Decorated('float', 123), BadDecorator)
-    test_parse_err('@object "foo"', ParserErr)
     test_parse_err('"foo', ParserErr)
 
     tests = [
