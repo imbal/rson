@@ -161,16 +161,13 @@ _1
 {"a"}
 @object @object {}
 "\uD800\uDD01"
-
-
+```
 
 # Appendix: Decorated JSON
 
 RSON objects can be encoded as a wrapped JSON, where:
 
-true, false, null, strings, numbers, lists unchanged,
-objects, and all tagged types are encoded as
-{'name':value}, where value can be wrapped, too
+true, false, null, strings, numbers, lists unchanged, objects, and all tagged types are encoded as {'name':value}, where value can be wrapped, too
 
 e.g. `{'object':[['a',1], ['b',2],3]}` 
 
