@@ -1,14 +1,10 @@
-r"""
-"""
-
-from collections import namedtuple, OrderedDict, defaultdict
-from datetime import datetime, timedelta, timezone
-
 import re
 import io
 import base64
 import json
 
+from collections import namedtuple, OrderedDict
+from datetime import datetime, timedelta, timezone
 
 class ParserErr(Exception):
     def __init__(self, buf, pos, reason=None):
@@ -291,6 +287,7 @@ def parse_rson(buf, pos):
             s = io.StringIO()
             ascii = False
 
+        # validate string
         if peek == "'":
             m = string_sq.match(buf, pos)
             if m:
@@ -335,15 +332,25 @@ def parse_rson(buf, pos):
                 lo = hi + 4
             elif esc == 'u':
                 n = int(buf[hi + 2:hi + 6], 16)
-                if ascii and n > 0xFF:
-                    raise SemanticErr('bytestring cannot have unicode')
-                s.write(chr(n))
+                if ascii:
+                    if n > 0xFF:
+                        raise ParserErr(buf, hi, 'bytestring cannot have escape > 255')
+                    s.append(n)
+                else:
+                    if 0xD800 <= n <= 0xDFFF:
+                        raise ParserErr(buf, hi, 'string cannot have surrogate pairs')
+                    s.write(chr(n))
                 lo = hi + 6
             elif esc == 'U':
                 n = int(buf[hi + 2:hi + 10], 16)
-                if ascii and n > 0xFF:
-                    raise SemanticErr('bytestring cannot have unicode')
-                s.write(chr(n))
+                if ascii:
+                    if n > 0xFF:
+                        raise ParserErr(buf, hi, 'bytestring cannot have escape > 255')
+                    s.append(n)
+                else:
+                    if 0xD800 <= n <= 0xDFFF:
+                        raise ParserErr(buf, hi, 'string cannot have surrogate pairs')
+                    s.write(chr(n))
                 lo = hi + 10
             elif esc == '\n':
                 lo = hi + 2
@@ -842,6 +849,8 @@ def main():
 
     test_dump_err(Decorated('float', 123), BadDecorator)
     test_parse_err('"foo', ParserErr)
+    test_parse_err('"\uD800\uDD01"', ParserErr)
+    test_parse_err(r'"\uD800\uDD01"', ParserErr)
 
     tests = [
         0, -1, +1,
