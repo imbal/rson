@@ -166,7 +166,7 @@ def parse_rson(buf, pos):
     peek = buf[pos]
 
     if peek == '@':
-        raise ParserErr(buf, pos, "Cannot nest decorators")
+        raise ParserErr(buf, pos, "Cannot nest tags")
 
     elif peek == '{':
         if name in reserved_tags:
