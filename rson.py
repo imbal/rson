@@ -19,7 +19,7 @@ class ParserErr(Exception):
         Exception.__init__(self, "{} (at pos={})".format(reason, pos))
 
 
-class BadDecorator(Exception):
+class InvalidTag(Exception):
     def __init__(self, name, reason):
         self.name = name
         Exception.__init__(self, reason)
@@ -40,7 +40,7 @@ string_dq = re.compile(
 string_sq = re.compile(
     r"'(?:[^'\\\n\x00-\x1F\uD800-\uDFFF]|\\(?:[\"'\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 
-decorator_name = re.compile(r"@(?!\d)\w+[ ]+")
+tag_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
 
 c99_flt = re.compile(
@@ -81,11 +81,10 @@ escaped = {
     '\\': '\\\\',
 }
 
-
 builtin_names = {'null': None, 'true': True, 'false': False}
 builtin_values = {None: 'null', True: 'true', False: 'false'}
 
-builtin_decorators = set("""
+reserved_tags = set("""
         bool int float complex
         string bytestring base64
         duration datetime
@@ -93,45 +92,45 @@ builtin_decorators = set("""
 """.split())
 
 # names -> Classes (take name, value as args)
-registered_decorators = OrderedDict()
-registered_classes = OrderedDict()  # classes -> undecorators (get name, value)
+class_for_tag = OrderedDict()
+tag_for_class = OrderedDict()  # classes -> tagger (get name, value)
 
 
-class Decorated:
+class TaggedObject:
     def __init__(self, name, value):
         self.name = name
         self.value = value
 
+tag_for_class[TaggedObject] = lambda obj: (obj.name, obj.value)
 
-registered_classes[Decorated] = lambda obj: (obj.name, obj.value)
 
 
-def undecorate(obj):
-    if obj.__class__ in registered_classes:
-        und = registered_classes[obj.__class__]
-        name, value = und(obj)
+def tag_for_object(obj):
+    if obj.__class__ in tag_for_class:
+        get_tag = tag_for_class[obj.__class__]
+        name, value = get_tag(obj)
     else:
         raise SemanticErr(
-            "Can't undecorate {}: unknown class {}".format(obj, obj.__class__))
+            "Can't find tag for object {}: unknown class {}".format(obj, obj.__class__))
 
     if name == 'object':
         return None, value
-    if name not in builtin_decorators:
+    if name not in reserved_tags:
         return name, value
     else:
-        raise BadDecorator(
-            name, "Can't undecorate {}, as {} is reserved name".format(obj, name))
+        raise InvalidTag(
+            name, "Can't find tag for object {}, as {} is reserved name".format(obj, name))
 
 
-def decorate(name, value):
-    if name in builtin_decorators:
-        raise BadDecorator(name, "{} is reserved".format(name))
+def tag_object(name, value):
+    if name in reserved_tags:
+        raise InvalidTag(name, "Can't tag {} with {}, {} is reserved".format(value, name, name))
 
-    if name in registered_decorators:
-        dec = registered_decorators[name]
-        return dec(name, value)
+    if name in class_for_tag:
+        tag_cls = class_for_tag[name]
+        return tag_cs(name, value)
     else:
-        return Decorated(name, value)
+        return TaggedObject(name, value)
 
 
 def parse_datetime(v):
@@ -157,7 +156,7 @@ def parse_rson(buf, pos):
     peek = buf[pos]
     name = None
     if peek == '@':
-        m = decorator_name.match(buf, pos)
+        m = tag_name.match(buf, pos)
         if m:
             pos = m.end()
             name = buf[m.start() + 1:pos].rstrip()
@@ -170,7 +169,7 @@ def parse_rson(buf, pos):
         raise ParserErr(buf, pos, "Cannot nest decorators")
 
     elif peek == '{':
-        if name in builtin_decorators:
+        if name in reserved_tags:
             if name not in ('object', 'record', 'dict'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on objects".format(name))
@@ -219,11 +218,11 @@ def parse_rson(buf, pos):
                 raise ParserErr(
                     buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
         if name not in (None, 'object', 'record', 'dict'):
-            out = decorate(name,  out)
+            out = tag_object(name,  out)
         return out, pos + 1
 
     elif peek == '[':
-        if name in builtin_decorators:
+        if name in reserved_tags:
             if name not in ('object', 'list', 'set', 'complex'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on lists".format(name))
@@ -270,12 +269,12 @@ def parse_rson(buf, pos):
         elif name == 'complex':
             out = complex(*out)
         else:
-            out = decorate(name,  out)
+            out = tag_object(name,  out)
 
         return out, pos
 
     elif peek == "'" or peek == '"':
-        if name in builtin_decorators:
+        if name in reserved_tags:
             if name not in ('object', 'string', 'float', 'datetime', 'bytestring', 'base64'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on strings".format(name))
@@ -386,12 +385,12 @@ def parse_rson(buf, pos):
                     raise ParserErr(
                         buf, pos, "invalid C99 float literal: {}".format(out))
             else:
-                out = decorate(name,  out)
+                out = tag_object(name,  out)
 
         return out, end
 
     elif peek in "-+0123456789":
-        if name in builtin_decorators:
+        if name in reserved_tags:
             if name not in ('object', 'int', 'float', 'duration'):
                 raise ParserErr(
                     buf, pos, "{} can't be used on numbers".format(name))
@@ -463,12 +462,12 @@ def parse_rson(buf, pos):
         elif name == 'int':
             if flt_end or exp_end:
                 raise ParserErr(
-                    buf, pos, "Can't decorate floating point with @int")
+                    buf, pos, "Can't tag_object floating point with @int")
         elif name == 'float':
             if not isintance(out, float):
                 out = float(out)
         else:
-            out = decorate(name, out)
+            out = tag_object(name, out)
 
         return out, end
 
@@ -491,11 +490,11 @@ def parse_rson(buf, pos):
         elif name == 'bool':
             if item not in ('true', 'false'):
                 raise ParserErr(buf, pos, '@bool can only true or false')
-        elif name in builtin_decorators:
+        elif name in reserved_tags:
             raise ParserErr(
                 buf, pos, "{} has no meaning for {}".format(repr(name), item))
         else:
-            out = decorate(name,  out)
+            out = tag_object(name,  out)
 
         return out, end
 
@@ -600,7 +599,7 @@ def dump_rson(obj, buf):
     elif isinstance(obj, timedelta):
         buf.write('@duration {}'.format(obj.total_seconds()))
     else:
-        nv = undecorate(obj)
+        nv = tag_for_object(obj)
         name, value = nv
         buf.write('@{} '.format(name))
         dump_rson(value, buf)
@@ -613,7 +612,7 @@ true, false, null ~> true, false, null
 "..." / '...' ~> "...." removing escapes where possible & using codepoints
 [1,2,3,] ~> [1,2,3]
 {"a":'object'} ~> {'object':[['a', 'object']])
-@decorated "item" ~> {'decorated': "item"}
+@tagged "item" ~> {'tagged': "item"}
 @float "NaN" ~> {'float':'NaN'}
 @bytestring "..." ~> {'base64':'....'}
 """
@@ -668,7 +667,7 @@ def djson_object_pairs_hook(pairs):
     if k == 'duration':
         return timedelta(seconds=v)
 
-    return decorate(k, v)
+    return tag_object(k, v)
 
 
 def djson_wrap(obj):
@@ -702,7 +701,7 @@ def djson_wrap(obj):
     elif isinstance(obj, complex):
         return {'complex': [obj.real, obj.imag]}
     else:
-        v = undecorate(obj)
+        v = tag_for_object(obj)
         if not v:
             raise NotImplementedError(
                 "Don't know how to wrap {}, {}".format(obj.__class__, obj))
@@ -847,7 +846,7 @@ def main():
 
     test_dump(1, "1")
 
-    test_dump_err(Decorated('float', 123), BadDecorator)
+    test_dump_err(TaggedObject('float', 123), InvalidTag)
     test_parse_err('"foo', ParserErr)
     test_parse_err('"\uD800\uDD01"', ParserErr)
     test_parse_err(r'"\uD800\uDD01"', ParserErr)

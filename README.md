@@ -1,40 +1,41 @@
 # RSON: Restructured Object Notation
 
-## JSON:
+## JSON in a nutshell:
 
- - true, false, null
- - "strings" with \" \\ \/ \b \f \n \r \t \uFFFF, no control codes
+ - whitespace is `\t \r \n \0x20`
+ - json document is either list, or object
+ - lists `[ obj, obj ]`
+ - objects `{ "key": valuea}`, only string keys
+ - `true`, `false`, `null`
+ - unicode `"strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, and no control codes unecaped.
  - int/float numbers (unary minus, no leading 0's (0900), except 0.xxx)
- - [ lists, no, trailing, commas ]   {"objects":"..."} with only string keys
- - list or object as root item
- - whitespace is tab, space, cr, lf
+ - no trailing commas
 
 ## RSON:
 
  - file MUST be utf-8, not cesu-8/utf-16/utf-32
- - byte order mark is treated as whitespace
- - any value as root object
+ - byte order mark is also treated as whitespace (along with \x09, \x0a, \x0d, \x20)
+ - rson document is any rson object
  - use `#....` as comments
- - decorators: tags on existing values: `@period 20`, `@a.name [1,2,3]` 
- - optional types through decorators: datetime, period, set, dict, complex
+ - tags: names on existing values: `@period 20`, `@a.name [1,2,3]` 
+ - optional types through tags: datetime, period, set, dict, complex
 
 ### RSON objects:
 
- - null
- - true, false
- - integers
+ - `null`
+ - `true`, `false`
+ - integers (decimal, binary, octal, hex)
  - floating point
- - strings
+ - strings (single or double quotes)
  - lists
  - records
- - decorated objects
+ - tagged objects
 
 ### RSON strings: 
 
- - \xFF as \u00FF
- - \UFFFFFFFF  \' escapes
  - use ''s or ""s
- - \ at end of line is continuation
+ - json escapes, and `\xFF` (as `\u00FF`), `\UFFFFFFFF`  `\'` too
+ - `\` at end of line is continuation
  - no surrogate pairs
 
 ### RSON numbers:
@@ -42,9 +43,9 @@
  - allow unary minus, plus
  - allow leading zero
  - allow underscores (except leading digits)
- - binary ints: 0b1010
- - octal ints: 0o777
- - hex ints: 0xFF 
+ - binary ints: `0b1010`
+ - octal ints `0o777`
+ - hex ints: `0xFF` 
 
 ### RSON lists:
 
@@ -57,33 +58,33 @@
  - allow trailing commas
  - implementations MUST support string keys
 
-### RSON decorated objects:
+### RSON tagged objects:
 
  - `@foo.foo {"foo":1}` name is any unicode letter/digit, `_`or a `.`
  - `@int 1`, `@string "two"` are just `1` and `"two"`
  - a named tag for objects
  - do not nest
- - whitespace between decorator name and object is *mandatory*
- - built in decorators are for mandatory and optional types
+ - whitespace between tag name and object is *mandatory*
+ - every type has a reserved tag name
  - parsers may reject unknown, or return a wrapped object 
 
 ### RSON C99 float strings (optional):
 
  - `@float "0x0p0"` C99 style, sprintf('%a') format
  - `@float "NaN"` or nan,Inf,inf,+Inf,-Inf,+inf,-inf
- -  no underscores
+ -  no underscores allowed
 
 ### RSON sets (optional):
 
  - `@set [1,2,3]`
- - always a decorated list
+ - always a tagged list
  - no duplicate items
 
 ### RSON dicts (optional):
 
  - `@dict {"a":1}` 
  - keys must be in lexical order, must round trip in same order.
- - keys must be comparable
+ - keys must be comparable, hashable, parser MAY reject if not
 
 ### RSON datetimes/periods (optional):
 
@@ -98,14 +99,14 @@
  - `@bytestring "....\xff"` 
  - `@base64 "...=="`
  - returns a bytestring if possible
- - can't have \u \U escapes > 0xFF
- - all non printable ascii characters must be escaped: \xFF
+ - can't have `\u` `\U` escapes > 0xFF
+ - all non printable ascii characters must be escaped: `\xFF`
 
 ### RSON complex numbers: (optional)
 
  - `@complex [0,1]`
 
-### Builtin RSON Decorators:
+### Builtin RSON Tags:
 
 Pass throughs:
 
@@ -118,6 +119,7 @@ Pass throughs:
  - `@record` on records
 
 Transforms:
+
  - @float on strings (for C99 hex floats, including NaN, -Inf, +Inf)
  - @duration on numbers (seconds)
  - @datetime on strings (utc timestamp)
@@ -127,7 +129,7 @@ Transforms:
  - @complex on lists
  - @dict on records
 
-Any other use is an error and MUST be rejected.
+Any other use of a builtin tag is an error and MUST be rejected.
 
 # Appendix: Test Vectors
 
@@ -167,9 +169,18 @@ _1
 RSON objects can be encoded as a wrapped JSON, where:
 
 true, false, null, strings, numbers, lists unchanged,
-objects, and all decorated types are encoded as
+objects, and all tagged types are encoded as
 {'name':value}, where value can be wrapped, too
 
-e.g. {'object':[['a',1], ['b',2],3]} 
+e.g. `{'object':[['a',1], ['b',2],3]}` 
+
+`true`, `false`, `null` ~> `true`, `false`, `null`
+"..." / '...' ~> "...." 
+`[1,2,3,]` ~> `[1,2,3]`
+`{"a":'object'}` ~> `{'object':[['a', 'object']]}`
+`@tagged "item"` ~> `{'tagged': "item"}`
+`@float "NaN"` ~> `{'float':'NaN'}`
+`@bytestring "..."` ~> `{'base64':'....'}`
+
 
 
