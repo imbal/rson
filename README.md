@@ -171,13 +171,13 @@ true, false, null, strings, numbers, lists unchanged, objects, and all tagged ty
 
 e.g. `{'object':[['a',1], ['b',2],3]}` 
 
-`true`, `false`, `null` ~> `true`, `false`, `null`
-"..." / '...' ~> "...." 
-`[1,2,3,]` ~> `[1,2,3]`
-`{"a":'object'}` ~> `{'object':[['a', 'object']]}`
-`@tagged "item"` ~> `{'tagged': "item"}`
-`@float "NaN"` ~> `{'float':'NaN'}`
-`@bytestring "..."` ~> `{'base64':'....'}`
+- `true`, `false`, `null` ~> `true`, `false`, `null`
+- `"..."`, `'...'` ~> `"...."`
+- `[1,2,3,]` ~> `[1,2,3]`
+- `{"a":'object'}` ~> `{'object':[['a', 'object']]}`
+- `@tagged "item"` ~> `{'tagged': "item"}`
+- `@float "NaN"` ~> `{'float':'NaN'}`
+- `@bytestring "..."` ~> `{'base64':'....'}`
 
 
 
