@@ -10,7 +10,7 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
 
 ## JSON in a nutshell:
 
- - whitespace is `\t \r \n \0x20`
+ - whitespace is `\t \r \n \x20`
  - json document is either list, or object
  - lists `[ obj, obj ]`
  - objects `{ "key": valuea}`, only string keys
