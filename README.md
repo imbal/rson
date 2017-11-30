@@ -25,7 +25,7 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
  - byte order mark is also treated as whitespace (along with \x09, \x0a, \x0d, \x20)
  - rson document is any rson object
  - use `#....` as comments
- - tags: names on existing values: `@period 20`, `@a.name [1,2,3]` 
+ - tags: names on existing values: `@duration 20`, `@a.name [1,2,3]` 
  - optional types through tags: datetime, period, set, dict, complex
 
 ### RSON objects:
