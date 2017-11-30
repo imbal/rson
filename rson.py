@@ -6,6 +6,7 @@ import json
 from collections import namedtuple, OrderedDict
 from datetime import datetime, timedelta, timezone
 
+
 class ParserErr(Exception):
     def __init__(self, buf, pos, reason=None):
         self.buf = buf
@@ -101,8 +102,8 @@ class TaggedObject:
         self.name = name
         self.value = value
 
-tag_for_class[TaggedObject] = lambda obj: (obj.name, obj.value)
 
+tag_for_class[TaggedObject] = lambda obj: (obj.name, obj.value)
 
 
 def tag_for_object(obj):
@@ -124,7 +125,8 @@ def tag_for_object(obj):
 
 def tag_object(name, value):
     if name in reserved_tags:
-        raise InvalidTag(name, "Can't tag {} with {}, {} is reserved".format(value, name, name))
+        raise InvalidTag(
+            name, "Can't tag {} with {}, {} is reserved".format(value, name, name))
 
     if name in class_for_tag:
         tag_cls = class_for_tag[name]
@@ -333,22 +335,26 @@ def parse_rson(buf, pos):
                 n = int(buf[hi + 2:hi + 6], 16)
                 if ascii:
                     if n > 0xFF:
-                        raise ParserErr(buf, hi, 'bytestring cannot have escape > 255')
+                        raise ParserErr(
+                            buf, hi, 'bytestring cannot have escape > 255')
                     s.append(n)
                 else:
                     if 0xD800 <= n <= 0xDFFF:
-                        raise ParserErr(buf, hi, 'string cannot have surrogate pairs')
+                        raise ParserErr(
+                            buf, hi, 'string cannot have surrogate pairs')
                     s.write(chr(n))
                 lo = hi + 6
             elif esc == 'U':
                 n = int(buf[hi + 2:hi + 10], 16)
                 if ascii:
                     if n > 0xFF:
-                        raise ParserErr(buf, hi, 'bytestring cannot have escape > 255')
+                        raise ParserErr(
+                            buf, hi, 'bytestring cannot have escape > 255')
                     s.append(n)
                 else:
                     if 0xD800 <= n <= 0xDFFF:
-                        raise ParserErr(buf, hi, 'string cannot have surrogate pairs')
+                        raise ParserErr(
+                            buf, hi, 'string cannot have surrogate pairs')
                     s.write(chr(n))
                 lo = hi + 10
             elif esc == '\n':
@@ -709,36 +715,6 @@ def djson_wrap(obj):
         return {name: djson_wrap(value)}
 
 
-# rbox - framing format for rson objects
-#   <record type> <length> <name> <newline>
-#   <payload> <newline>
-#   end <checksum> <newline>
-# for a log/stream of objects
-
-class rbox:
-    def __init__(self, rtype, rkey, rvalue):
-        self.rtype = rtype
-        self.rkey = rkey
-        self.rvalue = rvalue
-
-    def dump_fh(self, fh):
-        fh.write(self.rtype)
-        fh.write(' ')
-        buf = dump(self.rvalue).encode('utf-8')
-        fh.write(len(buf))
-
-
-class rboxIo:
-    pass
-
-
-def open_rbox(filename):
-    pass
-
-
-def parse_rbox(buf):
-    pass
-
 # Tests
 
 
@@ -782,25 +758,6 @@ def test_dump_err(obj, exc):
     else:
         raise AssertionError(
             '{} did not cause {}, dumping: {}'.format(obj, exc, buf))
-
-
-def test_round(obj):
-    buf0 = dump(obj)
-    obj1 = parse(buf0)
-    buf1 = dump(obj1)
-
-    out = parse(buf1)
-
-    if obj != obj:
-        if buf0 != buf1 or obj1 == obj1 or out == out:
-            raise AssertionError('{} != {}'.format(obj, out))
-    else:
-        if buf0 != buf1:
-            raise AssertionError('buf {} != {}'.format(buf0, buf1))
-        if obj != obj1:
-            raise AssertionError('buf {} != {}'.format(obj, obj1))
-        if obj != out:
-            raise AssertionError('buf {} != {}'.format(obj, out))
 
 
 def main():
@@ -863,8 +820,26 @@ def main():
         timedelta(seconds=666),
     ]
 
-    for x in tests:
-        test_round(x)
+    for obj in tests:
+        buf0 = dump(obj)
+        obj1 = parse(buf0)
+        buf1 = dump(obj1)
+
+        out = parse(buf1)
+
+        if obj != obj:
+            if buf0 != buf1 or obj1 == obj1 or out == out:
+                raise AssertionError('{} != {}'.format(obj, out))
+        else:
+            if buf0 != buf1:
+                raise AssertionError(
+                    'mismatched output {} != {}'.format(buf0, buf1))
+            if obj != obj1:
+                raise AssertionError(
+                    'failed first trip {} != {}'.format(obj, obj1))
+            if obj != out:
+                raise AssertionError(
+                    'failed second trip {} != {}'.format(obj, out))
 
     for x in tests:
         out = parse(dump(x))
