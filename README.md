@@ -1,5 +1,13 @@
 # RSON: Restructured Object Notation
 
+RSON is JSON with a little bit of sugar. 
+
+- Trailing Commas
+- Comments
+- ... and a few other pieces
+
+RSON supports encoding types outside of JSON through tagging, like timestamps.
+
 ## JSON in a nutshell:
 
  - whitespace is `\t \r \n \0x20`
