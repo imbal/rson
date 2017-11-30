@@ -107,7 +107,7 @@ class TaggedObject:
 tag_for_class[TaggedObject] = lambda obj: (obj.name, obj.value)
 
 
-def tag_for_object(obj):
+def tag_value_for_object(obj):
     if obj.__class__ in tag_for_class:
         get_tag = tag_for_class[obj.__class__]
         name, value = get_tag(obj)
@@ -124,7 +124,7 @@ def tag_for_object(obj):
             name, "Can't find tag for object {}, as {} is reserved name".format(obj, name))
 
 
-def tag_object(name, value):
+def tag_rson_value(name, value):
     if name in reserved_tags:
         raise InvalidTag(
             name, "Can't tag {} with {}, {} is reserved".format(value, name, name))
@@ -221,7 +221,7 @@ def parse_rson(buf, pos):
                 raise ParserErr(
                     buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
         if name not in (None, 'object', 'record', 'dict'):
-            out = tag_object(name,  out)
+            out = tag_rson_value(name,  out)
         return out, pos + 1
 
     elif peek == '[':
@@ -272,7 +272,7 @@ def parse_rson(buf, pos):
         elif name == 'complex':
             out = complex(*out)
         else:
-            out = tag_object(name,  out)
+            out = tag_rson_value(name,  out)
 
         return out, pos
 
@@ -392,7 +392,7 @@ def parse_rson(buf, pos):
                     raise ParserErr(
                         buf, pos, "invalid C99 float literal: {}".format(out))
             else:
-                out = tag_object(name,  out)
+                out = tag_rson_value(name,  out)
 
         return out, end
 
@@ -469,12 +469,12 @@ def parse_rson(buf, pos):
         elif name == 'int':
             if flt_end or exp_end:
                 raise ParserErr(
-                    buf, pos, "Can't tag_object floating point with @int")
+                    buf, pos, "Can't tag_rson_value floating point with @int")
         elif name == 'float':
             if not isintance(out, float):
                 out = float(out)
         else:
-            out = tag_object(name, out)
+            out = tag_rson_value(name, out)
 
         return out, end
 
@@ -501,7 +501,7 @@ def parse_rson(buf, pos):
             raise ParserErr(
                 buf, pos, "{} has no meaning for {}".format(repr(name), item))
         else:
-            out = tag_object(name,  out)
+            out = tag_rson_value(name,  out)
 
         return out, end
 
@@ -606,7 +606,7 @@ def dump_rson(obj, buf):
     elif isinstance(obj, timedelta):
         buf.write('@duration {}'.format(obj.total_seconds()))
     else:
-        nv = tag_for_object(obj)
+        nv = tag_value_for_object(obj)
         name, value = nv
         buf.write('@{} '.format(name))
         dump_rson(value, buf)
@@ -674,7 +674,7 @@ def djson_object_pairs_hook(pairs):
     if k == 'duration':
         return timedelta(seconds=v)
 
-    return tag_object(k, v)
+    return tag_rson_value(k, v)
 
 
 def djson_wrap(obj):
@@ -708,7 +708,7 @@ def djson_wrap(obj):
     elif isinstance(obj, complex):
         return {'complex': [obj.real, obj.imag]}
     else:
-        v = tag_for_object(obj)
+        v = tag_value_for_object(obj)
         if not v:
             raise NotImplementedError(
                 "Don't know how to wrap {}, {}".format(obj.__class__, obj))
