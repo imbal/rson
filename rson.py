@@ -487,7 +487,7 @@ class Codec:
 
             if item not in builtin_names:
                 raise ParserErr(
-                    buf, pos, "{} is not a recognised built-in".format(repr(name)))
+                    buf, pos, "{} is not a recognised built-in".format(repr(item)))
 
             out = builtin_names[item]
 
