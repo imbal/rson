@@ -13,7 +13,7 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
  - whitespace is `\t \r \n \x20`
  - json document is either list, or object
  - lists `[ obj, obj ]`
- - objects `{ "key": valuea}`, only string keys
+ - objects `{ "key": value}`, only string keys
  - `true`, `false`, `null`
  - unicode `"strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, and no control codes unecaped.
  - int/float numbers (unary minus, no leading 0's (0900), except 0.xxx)
@@ -26,6 +26,7 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
  - rson document is any rson object
  - use `#....` as comments
  - tags: names on existing values: `@duration 20`, `@a.name [1,2,3]` 
+   (they do not nest)
  - optional types through tags: datetime, period, set, dict, complex
 
 ### RSON objects:
@@ -126,6 +127,10 @@ Pass throughs:
  - `@list` on lists
  - `@record` on records
 
+Reserved:
+
+ - `unknown`
+
 Transforms:
 
  - @float on strings (for C99 hex floats, including NaN, -Inf, +Inf)
@@ -172,21 +177,6 @@ _1
 "\uD800\uDD01"
 ```
 
-# Appendix: Decorated JSON
-
-RSON objects can be encoded as a wrapped JSON, where:
-
-true, false, null, strings, numbers, lists unchanged, objects, and all tagged types are encoded as {'name':value}, where value can be wrapped, too
-
-e.g. `{'object':[['a',1], ['b',2],3]}` 
-
-- `true`, `false`, `null` ~> `true`, `false`, `null`
-- `"..."`, `'...'` ~> `"...."`
-- `[1,2,3,]` ~> `[1,2,3]`
-- `{"a":'object'}` ~> `{'object':[['a', 'object']]}`
-- `@tagged "item"` ~> `{'tagged': "item"}`
-- `@float "NaN"` ~> `{'float':'NaN'}`
-- `@bytestring "..."` ~> `{'base64':'....'}`
 
 
 
