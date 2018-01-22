@@ -39,9 +39,9 @@ flt_b10 = re.compile(r"\.[\d_]+")
 exp_b10 = re.compile(r"[eE](?:\+|-)?[\d+_]")
 
 string_dq = re.compile(
-    r'"(?:[^"\\\n\x00-\x1F\uD800-\uDFFF]|\\(?:[\'"\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
+    r'"(?:[^"\\\n\x00-\x1F\uD800-\uDFFF]|\\(?:[\'"\\/bfnrt]|\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*"')
 string_sq = re.compile(
-    r"'(?:[^'\\\n\x00-\x1F\uD800-\uDFFF]|\\(?:[\"'\\/bfnrt]|\\\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
+    r"'(?:[^'\\\n\x00-\x1F\uD800-\uDFFF]|\\(?:[\"'\\/bfnrt]|\r?\n|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}))*'")
 
 tag_name = re.compile(r"@(?!\d)\w+[ ]+")
 identifier = re.compile(r"(?!\d)[\w\.]+")
@@ -649,6 +649,10 @@ if __name__ == '__main__':
     test_parse("0o0_1_2_3", 0o123)
     test_parse("0b0_1_0_1", 5)
     test_parse("0 #comment", 0)
+    test_parse("""
+"a\\
+b"        
+    """, "ab")
     test_parse("0.0", 0.0)
     test_parse("-0.0", -0.0)
     test_parse("'foo'", "foo")
@@ -663,7 +667,7 @@ if __name__ == '__main__':
     test_parse("[1]", [1])
     test_parse("[1,]", [1])
     test_parse("[]", [])
-    test_parse("[1,2,3,4,4]", [1, 2, 3, 4, 4])
+    test_parse("[1 , 2 , 3 , 4 , 4 ]", [1, 2, 3, 4, 4])
     test_parse("{'a':1,'b':2}", dict(a=1, b=2))
     test_parse("@set [1,2,3,4]", set([1, 2, 3, 4]))
     test_parse("{'a':1,'b':2}", dict(a=1, b=2))
