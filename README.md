@@ -71,7 +71,7 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
 ### RSON records (aka, JSON objects):
 
  - no duplicate keys
- - insertion order must be preserved
+ - insertion order must be preserved (like modern python, ruby, javascript do)
  - allow trailing commas
  - implementations MUST support string keys
 
