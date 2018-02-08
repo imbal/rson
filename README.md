@@ -29,6 +29,14 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
    (they do not nest)
  - optional types through tags: datetime, period, set, dict, complex
 
+```
+{ 
+    "name": "Sam",
+    "pets": ["Fee","Ret",],
+    "birthday": @datetime "1970-01-01T00:00:00.0Z",
+}
+```
+
 ### RSON objects:
 
  - `null`
