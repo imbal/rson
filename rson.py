@@ -12,9 +12,13 @@ see spec/rson/md
 import re
 import io
 import base64
-import json
+import sys
 
-from collections import namedtuple, OrderedDict
+if sys.version_info.minor > 6 or sys.version_info.minor == 6 and sys.implementation.name == 'cpython':
+    OrderedDict = dict
+else:
+    from collections import namedtuple, OrderedDict
+
 from datetime import datetime, timedelta, timezone
 
 
@@ -210,7 +214,7 @@ class Codec:
                         pos = m.end()
                 elif peek != '}':
                     raise ParserErr(
-                        buf, pos, "Expecting a ',', or a '}' but found {}".format(repr(peek)))
+                        buf, pos, "Expecting a ',', or a '{}' but found {}".format('{}',repr(peek)))
             if name not in (None, 'object', 'record', 'dict'):
                 out = self.tagged_to_object(name,  out)
             if transform is not None:
@@ -519,7 +523,7 @@ class Codec:
             buf.write('"')
             for c in obj:
                 if c in escaped:
-                    buf.write(escaped)
+                    buf.write(escaped[c])
                 elif ord(c) < 0x20:
                     buf.write('\\x{:02X}'.format(ord(c)))
                 else:
@@ -560,7 +564,7 @@ class Codec:
                     buf.write(", ")
                 self.dump_rson(x, buf, transform)
             buf.write(']')
-        elif isinstance(obj, OrderedDict):
+        elif isinstance(obj, OrderedDict): # must be before dict
             buf.write('{')
             first = True
             for k, v in obj.items():
