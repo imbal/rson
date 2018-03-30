@@ -16,6 +16,7 @@ import sys
 
 if sys.version_info.minor > 6 or sys.version_info.minor == 6 and sys.implementation.name == 'cpython':
     OrderedDict = dict
+    from collections import namedtuple
 else:
     from collections import namedtuple, OrderedDict
 
