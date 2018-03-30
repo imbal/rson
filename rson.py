@@ -600,6 +600,169 @@ class Codec:
                 value = OrderedDict(value)
             buf.write('@{} '.format(name))
             self.dump_rson(value, buf, transform)  # XXX: prevent @foo @foo
+        
+
+
+class BinaryCodec:
+    """
+        just enough of a type-length-value scheme to be dangerous
+        data model: json with ordered dictionaries, bytestrings, and tagged objects
+
+        true = "y"
+        false = "n"
+        null = "z"
+        int = "i" <integer as ascii string> \x7F
+        float = "f" <c99-hex float as ascii string> \x7F
+        bytes = "b" <number bytes as ascii string> \x7F <bytes> \x7F
+        list = "L" <number of entries as ascii string> \x7F (<encoded value>)* \7F
+        record = "R" <number of pairs as ascii string> \x7F (<encoded key> <encoded value>)* \7F
+        record = "T" <name as printable ascii string> \x7F <encoded value> \7F
+
+        note: 0..31 and 128..255 are not used as types for a reason
+        
+        stretch goals:
+            use utf-8 codepoint as type, as high bit is reserved
+            encode ints 0..31 as types \x00 .. \x1f
+            types for pos int, neg int, float that use <width as codepoint> <bytes>
+                i.e "+\x01\x20 for 32, "-\x01\x7F" as -127
+            types to define numbers for tag/field names in records, 
+
+    """
+    TRUE = ord("y")
+    FALSE = ord("n")
+    NULL = ord("z")
+    INT = ord("i")
+    FLOAT = ord("f")
+    STRING = ord("u")
+    BYTES = ord("b")
+    LIST = ord("L")
+    RECORD = ord("R")
+    TAG = ord("T")
+    END = 127
+
+    def __init__(self, object_to_tagged, tagged_to_object):
+        self.tags = object_to_tagged
+        self.classes = tagged_to_object
+
+    def parse(self, buf, offset=0):
+        peek = buf[offset]
+        if peek == self.TRUE:
+            return True, offset+1
+        elif peek == self.FALSE:
+            return False, offset+1
+        elif peek == self.NULL:
+            return None, offset+1
+        elif peek == self.INT:
+            end = buf.index(self.END, offset+1)
+            obj = buf[offset+1:end].decode('ascii')
+            return int(obj), end+1
+        elif peek == self.FLOAT:
+            end = buf.index(self.END, offset+1)
+            obj = buf[offset+1:end].decode('ascii')
+            return float.fromhex(obj), end+1
+        elif peek == self.BYTES:
+            end = buf.index(self.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start, end = end+1, end+1+size
+            obj = buf[start:end]
+            end = buf.index(self.END, end)
+            return obj, end+1
+        elif peek == self.STRING:
+            end = buf.index(self.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start, end = end+1, end+1+size
+            obj = buf[start:end].decode('utf-8')
+            end = buf.index(self.END, end)
+            return obj, end+1
+        elif peek == self.LIST:
+            end = buf.index(self.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start = end+1
+            out = []
+            for _ in range(size):
+                value, start = self.parse(buf, start)
+                out.append(value)
+            end = buf.index(self.END, start)
+            return out, end+1
+        elif peek == self.RECORD:
+            end = buf.index(self.END, offset+1)
+            size = int(buf[offset+1:end].decode('ascii'))
+            start = end+1
+            out = {}
+            for _ in range(size):
+                key, start = self.parse(buf, start)
+                value, start = self.parse(buf, start)
+                out[key] = value
+
+            end = buf.index(self.END, start)
+            return out, end+1
+        elif peek == self.TAG:
+            end = buf.index(self.END, offset+1)
+            tag = (buf[offset+1:end].decode('ascii'))
+            cls = self.classes[tag]
+            args, start = self.parse(buf, end+1)
+            out = cls(**args)
+            end = buf.index(self.END, start)
+            return out, end+1
+
+
+        raise Exception('bad buf {}'.format(peek.encode('ascii')))
+
+
+    def dump(self, obj, buf):
+        if obj is True:
+            buf.append(self.TRUE)
+        elif obj is False:
+            buf.append(self.FALSE)
+        elif obj is None:
+            buf.append(self.NULL)
+        elif isinstance(obj, int):
+            buf.append(self.INT)
+            buf.extend(str(obj).encode('ascii'))
+            buf.append(self.END)
+        elif isinstance(obj, float):
+            buf.append(self.INT)
+            buf.extend(float.hex(obj).encode('ascii'))
+            buf.append(self.END)
+        elif isinstance(obj, (bytes,bytearray)):
+            buf.append(self.BYTES)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(self.END)
+            buf.extend(obj)
+            buf.append(self.END)
+        elif isinstance(obj, (str)):
+            obj = obj.encode('utf-8')
+            buf.append(self.STRING)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(self.END)
+            buf.extend(obj)
+            buf.append(self.END)
+        elif isinstance(obj, (list, tuple)):
+            buf.append(self.LIST)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(self.END)
+            for x in obj:
+                self.dump(x, buf)
+            buf.append(self.END)
+        elif isinstance(obj, (dict)):
+            buf.append(self.RECORD)
+            buf.extend(str(len(obj)).encode('ascii'))
+            buf.append(self.END)
+            for k,v in obj.items():
+                self.dump(k, buf)
+                self.dump(v, buf)
+            buf.append(self.END)
+        elif obj.__class__ in self.tags:
+            tag = self.tags[obj.__class__].encode('ascii')
+            buf.append(self.TAG)
+            buf.extend(tag)
+            buf.append(self.END)
+            self.dump(obj.__dict__, buf)
+            buf.append(self.END)
+        else:
+            raise Exception('bad obj {!r}'.format(obj))
+        return buf
+
 
 if __name__ == '__main__':
     codec = Codec(None, None)
