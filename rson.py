@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""restructured object notation, or rson
+"""
+RSON: Restructured Object Notation
 
-(in effect, json with tagged objects)
-
-- allows bom, trailing commas, any object as root, and comments
-- bytestrings, datetimes, sugar for numbers too
-
-see spec/rson/md
+RSON is JSON, with comments, commas, and tags.
 """
 
 import re
@@ -29,7 +25,8 @@ reserved_tags = set("""
         bool int float complex
         string bytestring base64
         duration datetime
-        set list dict object
+        set list dict record
+        object
         unknown
 """.split())
 
@@ -616,7 +613,7 @@ class BinaryCodec:
         bytes = "b" <number bytes as ascii string> \x7F <bytes> \x7F
         list = "L" <number of entries as ascii string> \x7F (<encoded value>)* \7F
         record = "R" <number of pairs as ascii string> \x7F (<encoded key> <encoded value>)* \7F
-        record = "T" <name as printable ascii string> \x7F <encoded value> \7F
+        tagged = "T" <name as printable ascii string> \x7F <encoded value> \7F
 
         note: 0..31 and 128..255 are not used as types for a reason
         
@@ -635,9 +632,9 @@ class BinaryCodec:
     FLOAT = ord("f")
     STRING = ord("u")
     BYTES = ord("b")
-    LIST = ord("L")
-    RECORD = ord("R")
-    TAG = ord("T")
+    LIST = ord("l")
+    RECORD = ord("r")
+    TAG = ord("t")
     END = 127
 
     def __init__(self, object_to_tagged, tagged_to_object):
@@ -661,22 +658,19 @@ class BinaryCodec:
             obj = buf[offset+1:end].decode('ascii')
             return float.fromhex(obj), end+1
         elif peek == self.BYTES:
-            end = buf.index(self.END, offset+1)
-            size = int(buf[offset+1:end].decode('ascii'))
+            size, end = self.parse(buf, offset+1)
             start, end = end+1, end+1+size
             obj = buf[start:end]
             end = buf.index(self.END, end)
             return obj, end+1
         elif peek == self.STRING:
-            end = buf.index(self.END, offset+1)
-            size = int(buf[offset+1:end].decode('ascii'))
+            size, end = self.parse(buf, offset+1)
             start, end = end+1, end+1+size
             obj = buf[start:end].decode('utf-8')
             end = buf.index(self.END, end)
             return obj, end+1
         elif peek == self.LIST:
-            end = buf.index(self.END, offset+1)
-            size = int(buf[offset+1:end].decode('ascii'))
+            size, end = self.parse(buf, offset+1)
             start = end+1
             out = []
             for _ in range(size):
@@ -685,8 +679,7 @@ class BinaryCodec:
             end = buf.index(self.END, start)
             return out, end+1
         elif peek == self.RECORD:
-            end = buf.index(self.END, offset+1)
-            size = int(buf[offset+1:end].decode('ascii'))
+            size, end = self.parse(buf, offset+1)
             start = end+1
             out = {}
             for _ in range(size):
@@ -697,8 +690,7 @@ class BinaryCodec:
             end = buf.index(self.END, start)
             return out, end+1
         elif peek == self.TAG:
-            end = buf.index(self.END, offset+1)
-            tag = (buf[offset+1:end].decode('ascii'))
+            tag, end = self.parse(buf, offset+1)
             cls = self.classes[tag]
             args, start = self.parse(buf, end+1)
             out = cls(**args)
@@ -726,28 +718,24 @@ class BinaryCodec:
             buf.append(self.END)
         elif isinstance(obj, (bytes,bytearray)):
             buf.append(self.BYTES)
-            buf.extend(str(len(obj)).encode('ascii'))
-            buf.append(self.END)
+            self.dump(len(obj))
             buf.extend(obj)
             buf.append(self.END)
         elif isinstance(obj, (str)):
             obj = obj.encode('utf-8')
             buf.append(self.STRING)
-            buf.extend(str(len(obj)).encode('ascii'))
-            buf.append(self.END)
+            self.dump(len(obj), buf)
             buf.extend(obj)
             buf.append(self.END)
         elif isinstance(obj, (list, tuple)):
             buf.append(self.LIST)
-            buf.extend(str(len(obj)).encode('ascii'))
-            buf.append(self.END)
+            self.dump(len(obj), buf)
             for x in obj:
                 self.dump(x, buf)
             buf.append(self.END)
         elif isinstance(obj, (dict)):
             buf.append(self.RECORD)
-            buf.extend(str(len(obj)).encode('ascii'))
-            buf.append(self.END)
+            self.dump(len(obj), buf)
             for k,v in obj.items():
                 self.dump(k, buf)
                 self.dump(v, buf)
@@ -755,8 +743,7 @@ class BinaryCodec:
         elif obj.__class__ in self.tags:
             tag = self.tags[obj.__class__].encode('ascii')
             buf.append(self.TAG)
-            buf.extend(tag)
-            buf.append(self.END)
+            self.dump(tag, buf)
             self.dump(obj.__dict__, buf)
             buf.append(self.END)
         else:
