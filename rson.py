@@ -603,26 +603,6 @@ class Codec:
 class BinaryCodec:
     """
         just enough of a type-length-value scheme to be dangerous
-        data model: json with ordered dictionaries, bytestrings, and tagged objects
-
-        true = "y"
-        false = "n"
-        null = "z"
-        int = "i" <integer as ascii string> \x7F
-        float = "f" <c99-hex float as ascii string> \x7F
-        bytes = "b" <number bytes as ascii string> \x7F <bytes> \x7F
-        list = "L" <number of entries as ascii string> \x7F (<encoded value>)* \7F
-        record = "R" <number of pairs as ascii string> \x7F (<encoded key> <encoded value>)* \7F
-        tagged = "T" <name as printable ascii string> \x7F <encoded value> \7F
-
-        note: 0..31 and 128..255 are not used as types for a reason
-        
-        stretch goals:
-            use utf-8 codepoint as type, as high bit is reserved
-            encode ints 0..31 as types \x00 .. \x1f
-            types for pos int, neg int, float that use <width as codepoint> <bytes>
-                i.e "+\x01\x20 for 32, "-\x01\x7F" as -127
-            types to define numbers for tag/field names in records, 
 
     """
     TRUE = ord("y")
@@ -641,7 +621,14 @@ class BinaryCodec:
         self.tags = object_to_tagged
         self.classes = tagged_to_object
 
-    def parse(self, buf, offset=0):
+    def parse(self, buf):
+        obj, offset = self.parse_buf(buf, 0)
+        return obj
+
+    def dump(self, obj):
+        return self.dump_buf(obj, bytearray())
+
+    def parse_buf(self, buf, offset=0):
         peek = buf[offset]
         if peek == self.TRUE:
             return True, offset+1
@@ -658,50 +645,57 @@ class BinaryCodec:
             obj = buf[offset+1:end].decode('ascii')
             return float.fromhex(obj), end+1
         elif peek == self.BYTES:
-            size, end = self.parse(buf, offset+1)
-            start, end = end+1, end+1+size
+            size, end = self.parse_buf(buf, offset+1)
+            start, end = end, end+size
             obj = buf[start:end]
             end = buf.index(self.END, end)
             return obj, end+1
         elif peek == self.STRING:
-            size, end = self.parse(buf, offset+1)
-            start, end = end+1, end+1+size
+            size, end = self.parse_buf(buf, offset+1)
+            start, end = end, end+size
             obj = buf[start:end].decode('utf-8')
             end = buf.index(self.END, end)
             return obj, end+1
         elif peek == self.LIST:
-            size, end = self.parse(buf, offset+1)
-            start = end+1
+            size, start = self.parse_buf(buf, offset+1)
             out = []
             for _ in range(size):
-                value, start = self.parse(buf, start)
+                value, start = self.parse_buf(buf, start)
                 out.append(value)
             end = buf.index(self.END, start)
             return out, end+1
         elif peek == self.RECORD:
-            size, end = self.parse(buf, offset+1)
-            start = end+1
+            size, start = self.parse_buf(buf, offset+1)
             out = {}
             for _ in range(size):
-                key, start = self.parse(buf, start)
-                value, start = self.parse(buf, start)
+                key, start = self.parse_buf(buf, start)
+                value, start = self.parse_buf(buf, start)
                 out[key] = value
 
             end = buf.index(self.END, start)
             return out, end+1
         elif peek == self.TAG:
-            tag, end = self.parse(buf, offset+1)
-            cls = self.classes[tag]
-            args, start = self.parse(buf, end+1)
-            out = cls(**args)
+            tag, start = self.parse_buf(buf, offset+1)
+            value, start = self.parse_buf(buf, start)
             end = buf.index(self.END, start)
+            if tag == 'set':
+                out = set(value)
+            elif tag == 'complex':
+                out = complex(*value)
+            elif tag == 'datetime':
+                out = parse_datetime(value)
+            elif tag == 'duration':
+                out = timedelta(seconds=value)
+            else:
+                cls = self.classes[tag]
+                out = cls(**value)
             return out, end+1
 
 
         raise Exception('bad buf {}'.format(peek.encode('ascii')))
 
 
-    def dump(self, obj, buf):
+    def dump_buf(self, obj, buf):
         if obj is True:
             buf.append(self.TRUE)
         elif obj is False:
@@ -713,38 +707,67 @@ class BinaryCodec:
             buf.extend(str(obj).encode('ascii'))
             buf.append(self.END)
         elif isinstance(obj, float):
-            buf.append(self.INT)
+            buf.append(self.FLOAT)
             buf.extend(float.hex(obj).encode('ascii'))
             buf.append(self.END)
         elif isinstance(obj, (bytes,bytearray)):
             buf.append(self.BYTES)
-            self.dump(len(obj))
+            self.dump_buf(len(obj), buf)
             buf.extend(obj)
             buf.append(self.END)
         elif isinstance(obj, (str)):
             obj = obj.encode('utf-8')
             buf.append(self.STRING)
-            self.dump(len(obj), buf)
+            self.dump_buf(len(obj), buf)
             buf.extend(obj)
             buf.append(self.END)
         elif isinstance(obj, (list, tuple)):
             buf.append(self.LIST)
-            self.dump(len(obj), buf)
+            self.dump_buf(len(obj), buf)
             for x in obj:
-                self.dump(x, buf)
+                self.dump_buf(x, buf)
             buf.append(self.END)
         elif isinstance(obj, (dict)):
             buf.append(self.RECORD)
-            self.dump(len(obj), buf)
+            self.dump_buf(len(obj), buf)
             for k,v in obj.items():
-                self.dump(k, buf)
-                self.dump(v, buf)
+                self.dump_buf(k, buf)
+                self.dump_buf(v, buf)
             buf.append(self.END)
+        elif isinstance(obj, (set)):
+            buf.append(self.TAG)
+            self.dump_buf("set", buf)
+            buf.append(self.LIST)
+            self.dump_buf(len(obj), buf)
+            for x in obj:
+                self.dump_buf(x, buf)
+            buf.append(self.END)
+            buf.append(self.END)
+        elif isinstance(obj, complex):
+            buf.append(self.TAG)
+            self.dump_buf("complex", buf)
+            buf.append(self.LIST)
+            self.dump_buf(2, buf)
+            self.dump_buf(obj.real, buf)
+            self.dump_buf(obj.imag, buf)
+            buf.append(self.END)
+            buf.append(self.END)
+        elif isinstance(obj, datetime):
+            buf.append(self.TAG)
+            self.dump_buf("datetime", buf)
+            self.dump_buf(format_datetime(obj), buf)
+            buf.append(self.END)
+        elif isinstance(obj, timedelta):
+            buf.append(self.TAG)
+            self.dump_buf("duration", buf)
+            self.dump_buf(obj.total_seconds(), buf)
+            buf.append(self.END)
+
         elif obj.__class__ in self.tags:
             tag = self.tags[obj.__class__].encode('ascii')
             buf.append(self.TAG)
-            self.dump(tag, buf)
-            self.dump(obj.__dict__, buf)
+            self.dump_buf(tag, buf)
+            self.dump_buf(obj.__dict__, buf)
             buf.append(self.END)
         else:
             raise Exception('bad obj {!r}'.format(obj))
@@ -753,10 +776,13 @@ class BinaryCodec:
 
 if __name__ == '__main__':
     codec = Codec(None, None)
+    bcodec = BinaryCodec({},{})
 
     parse = codec.parse
     dump = codec.dump
 
+    bparse = bcodec.parse
+    bdump = bcodec.dump
 
     def test_parse(buf, obj):
         out = parse(buf)
@@ -764,12 +790,10 @@ if __name__ == '__main__':
         if (obj != obj and out == out) or (obj == obj and obj != out):
             raise AssertionError('{} != {}'.format(obj, out))
 
-
     def test_dump(obj, buf):
         out = dump(obj)
         if buf != out:
             raise AssertionError('{} != {}'.format(buf, out))
-
 
     def test_parse_err(buf, exc):
         try:
@@ -882,6 +906,26 @@ b"
                 raise AssertionError(
                     'failed second trip {} != {}'.format(obj, out))
 
+    for obj in tests:
+        buf0 = bdump(obj)
+        obj1 = bparse(buf0)
+        buf1 = bdump(obj1)
+
+        out = bparse(buf1)
+
+        if obj != obj:
+            if buf0 != buf1 or obj1 == obj1 or out == out:
+                raise AssertionError('{} != {}'.format(obj, out))
+        else:
+            if buf0 != buf1:
+                raise AssertionError(
+                    'mismatched output {} != {}'.format(buf0, buf1))
+            if obj != obj1:
+                raise AssertionError(
+                    'failed first trip {} != {}'.format(obj, obj1))
+            if obj != out:
+                raise AssertionError(
+                    'failed second trip {} != {}'.format(obj, out))
     print('tests passed')
 
 
