@@ -62,8 +62,7 @@ Along with some sugar atop JSON, RSON supports tagging literals to represent typ
 RSON has the following types of literals:
 
  - `null`, `true`, `false`
- - Integers (decimal, binary, octal, hex)
- - Floating Point
+ - Numbers (Floating Point, and integer literals: decimal, binary, octal, hex)
  - Strings (using single or double quotes)
  - Lists
  - Records (a JSON object with ordering and without duplicate keys)
@@ -93,6 +92,9 @@ As well as optional tags for other types:
  - binary ints: `0b1010`
  - octal ints `0o777`
  - hex ints: `0xFF` 
+ - floating point: `1.123e-10` `-0.0` `+0.0` 
+
+Special floating point values `NaN`, `+Infinity` are represented using C99 hex literals, `@float "NaN"`
 
 ## RSON lists:
 
@@ -100,10 +102,24 @@ As well as optional tags for other types:
 
 ## RSON records (aka, JSON objects):
 
- - no duplicate keys
- - insertion order must be preserved
+ - no duplicate keys: parser MUST reject
+ - insertion order must be preserved, but not considered in equality
  - allow trailing commas
  - implementations MUST support string keys
+
+ two keys are the same if
+
+ - both strings and same codepoints (unnormalized)
+ - same numerical value i.e `1` and `1.0` and `1.0e0` are the same key, `+0.0`, `-0.0` are the same key,
+ - lists of same size and items are same
+ - records of same size and key,values are same, ignoring order
+ 
+ except:
+
+ - `NaN` is never the same
+ - a list containing `NaN` can never match another list
+ - a record with a `NaN` key or value can never match another
+ - each `NaN` key in a record is unique
 
 ## RSON tagged objects:
 
@@ -120,18 +136,25 @@ As well as optional tags for other types:
  - `@float "NaN"` or nan,Inf,inf,+Inf,-Inf,+inf,-inf
  -  no underscores allowed
 
+`<sign>0x<hex mantissa>p<sign><decimal exponent>` or `...1x...` for subnormals.
+
 ### RSON sets (optional):
 
  - `@set [1,2,3]`
  - always a tagged list
- - no duplicate items
+ - no duplicate items, same rules as records
+ - ordering does not matter when comparing
 
 ### RSON dicts (optional):
 
  - `@dict {"a":1}` 
- - keys must be in lexical order, must round trip in same order.
- - no duplicate items
+ - keys must be emitted in lexical order, must round trip in same order.
+ - keys should all be the same type
+ - no duplicate items, same rules as records
  - keys must be comparable, hashable, parser MAY reject if not
+ - a `@dict` is equal to a record if it has same keys, ignoring order.
+
+sort order is only defined for keys of the same type
 
 ### RSON datetimes/periods (optional):
 
