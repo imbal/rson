@@ -72,6 +72,7 @@ RSON has a number of built-in tags:
  - `@object`, `@bool`, `@int`, `@float`, `@string`, `@list`, `@record`
 
 As well as optional tags for other types:
+
  - `@bytestring`, or `@base64` for bytestrings
  - `@float "0x0p0"`, for C99 Hex Floating Point Literals
  - `@dict` for unordered key-value maps
@@ -93,6 +94,7 @@ As well as optional tags for other types:
  - octal ints `0o777`
  - hex ints: `0xFF` 
  - floating point: `1.123e-10` `-0.0` `+0.0` 
+ - limits on size are implementation defined, parsers MAY reject numbers that are too big to represent.
 
 Special floating point values `NaN`, `+Infinity` are represented using C99 hex literals, `@float "NaN"`
 
@@ -114,12 +116,7 @@ Special floating point values `NaN`, `+Infinity` are represented using C99 hex l
  - lists of same size and items are same
  - records of same size and key,values are same, ignoring order
  
- except:
-
- - `NaN` is never the same
- - a list containing `NaN` can never match another list
- - a record with a `NaN` key or value can never match another
- - each `NaN` key in a record is unique
+semantics of `NaN` keys, or collections containing them are implementation defined.
 
 ## RSON tagged objects:
 
@@ -147,11 +144,12 @@ Special floating point values `NaN`, `+Infinity` are represented using C99 hex l
 
 ### RSON dicts (optional):
 
+This is for compatibility with hash tables without insertion order preservation.
+
  - `@dict {"a":1}` 
  - keys must be emitted in lexical order, must round trip in same order.
- - keys should all be the same type
+ - keys must all be the same type: number or string 
  - no duplicate items, same rules as records
- - keys must be comparable, hashable, parser MAY reject if not
  - a `@dict` is equal to a record if it has same keys, ignoring order.
 
 sort order is only defined for keys of the same type
