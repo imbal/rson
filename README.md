@@ -1,61 +1,93 @@
 # RSON: Restructured Object Notation
 
-RSON is JSON with a little bit of sugar. 
+RSON is JSON, with a little bit of sugar: Comments, Commas, and Tags.
 
-- Trailing Commas
-- Comments
-- ... and a few other pieces
-
-RSON supports encoding types outside of JSON through tagging, like timestamps.
-
-## JSON in a nutshell:
-
- - whitespace is `\t \r \n \x20`
- - json document is either list, or object
- - lists `[ obj, obj ]`
- - objects `{ "key": value}`, only string keys
- - `true`, `false`, `null`
- - unicode `"strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, and no control codes unecaped.
- - int/float numbers (unary minus, no leading 0's (0900), except 0.xxx)
- - no trailing commas
-
-## RSON:
-
- - file MUST be utf-8, not cesu-8/utf-16/utf-32
- - byte order mark is also treated as whitespace (along with \x09, \x0a, \x0d, \x20)
- - rson document is any rson object
- - use `#....` as comments
- - tags: names on existing values: `@duration 20`, `@a.name [1,2,3]` 
-   (they do not nest)
- - optional types through tags: datetime, period, set, dict, complex
+For example:
 
 ```
-{ 
-    "name": "Sam",
-    "pets": ["Fee","Ret",],
-    "birthday": @datetime "1970-01-01T00:00:00.0Z",
+{
+    "numbers": +0123.0,       # Can have leading zeros
+    "octal": 0o10,            # Oh, and comments too
+    "hex": 0xFF,              #
+    "binary": 0b1000_0001,     # Number literals can have _'s 
+
+    "lists": [1,2,3],         # Lists can have trailing commas
+
+    "strings": "At least \x61 \u0061 and \U00000061 work now",
+    "or": 'a string',          # both "" and '' work.
+
+    "records": {
+        "a": 1,               # Must have unique keys
+        "b": 2,               # and the order must be kept
+    },
 }
 ```
 
-### RSON objects:
+Along with some sugar atop JSON, RSON supports tagging literals to represent types outside of JSON:
 
- - `null`
- - `true`, `false`
- - integers (decimal, binary, octal, hex)
- - floating point
- - strings (single or double quotes)
- - lists
- - records
- - tagged objects
+- `@datetime "2017-11-22T23:32:07.100497Z"`, a tagged RFC 3339 datestamp
+- `@duration 60` (a duration in seconds, float or int)
+- `@base64 "...=="`, a base64 encoded bytestring
+- `@set`, `@dict`, `@complex`, `@bytestring`
 
-### RSON strings: 
+
+## JSON in a nutshell:
+
+ - A unicode text file, without a Byte Order Mark
+ - Whitespace is `\t`, `\r`, `\n`, `\x20`
+ - JSON document is either list, or object
+ - Lists are `[]`, `[obj]`, `[ obj, obj ]`, ...
+ - Objects: `{ "key": value}`, only string keys
+ - Built-ins: `true`, `false`, `null`
+ - `"unicode strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, and no control codes unecaped.
+ - int/float numbers (unary minus, no leading zeros, except for `0.xxx`)
+ - No Comments, No Trailing commas
+
+## RSON in a Nutshell
+
+ - File MUST be utf-8, not cesu-8/utf-16/utf-32, without surrogate pairs.
+ - Use `#.... <end of line>` for comments
+ - Byte Order Mark is treated as whitespace (along with `\x09`, `\x0a`, `\x0d`, `\x20`)
+ - RSON Document is any RSON Object, (i.e `1` is a valid RSON file).
+ - Lists are `[]`, `[obj]`, `[obj,]`, `[obj, obj]` ... (trailing comma optional)
+ - Records are `{ "key": value}`, keys must be unique, order must be preserved. 
+ - Built-ins: `true`, `false`, `null`
+ - `"unicode strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, no control codes unecaped, and `''` can be used instead of `""`.
+ - int/float numbers (unary plus or minus, allowleading zeros, hex, octal, and binary integer liters)
+ - Tagged literals: `@name [1,2,3]` for any other type of value.
+
+ Errors are fatal. A record with duplicate keys, or a string too long, or a number to big to represent MUST cause the parse to fail outright.
+
+
+# RSON Object Model and Syntax
+
+RSON has the following types of literals:
+
+ - `null`, `true`, `false`
+ - Numbers (Floating Point, and integer literals: decimal, binary, octal, hex)
+ - Strings (using single or double quotes)
+ - Lists
+ - Records (a JSON object with ordering and without duplicate keys)
+ - Tagged Literal
+
+RSON has a number of built-in tags:
+ - `@object`, `@bool`, `@int`, `@float`, `@string`, `@list`, `@record`
+
+As well as optional tags for other types:
+
+ - `@bytestring`, or `@base64` for bytestrings
+ - `@float "0x0p0"`, for C99 Hex Floating Point Literals
+ - `@dict` for unordered key-value maps
+ - `@set` for sets, `@complex` for complex numbers
+ - `@datetime`, `@duration` for time as point or measurement.
+
+## RSON strings: 
 
  - use ''s or ""s
  - json escapes, and `\xFF` (as `\u00FF`), `\UFFFFFFFF`  `\'` too
- - `\` at end of line is continuation
- - no surrogate pairs
+ - no surrogate pairs, no unprintables
 
-### RSON numbers:
+## RSON numbers:
 
  - allow unary minus, plus
  - allow leading zero
@@ -63,27 +95,39 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
  - binary ints: `0b1010`
  - octal ints `0o777`
  - hex ints: `0xFF` 
+ - floating point: `1.123e-10` `-0.0` `+0.0` 
+ - limits on size are implementation defined, parsers MAY reject numbers that are too big to represent.
 
-### RSON lists:
+Special floating point values `NaN`, `+Infinity` are represented using C99 hex literals, `@float "NaN"`
+
+## RSON lists:
 
  - allow trailing commas
 
-### RSON records (aka, JSON objects):
+## RSON records (aka, JSON objects):
 
- - no duplicate keys
- - insertion order must be preserved (like modern python, ruby, javascript do)
+ - no duplicate keys: parser MUST reject
+ - insertion order must be preserved, but not considered in equality
  - allow trailing commas
  - implementations MUST support string keys
 
-### RSON tagged objects:
+ two keys are the same if
+
+ - both strings and same codepoints (unnormalized)
+ - same numerical value i.e `1` and `1.0` and `1.0e0` are the same key, `+0.0`, `-0.0` are the same key,
+ - lists of same size and items are same
+ - records of same size and key,values are same, ignoring order
+ 
+semantics of `NaN` keys, or collections containing them are implementation defined.
+
+## RSON tagged objects:
 
  - `@foo.foo {"foo":1}` name is any unicode letter/digit, `_`or a `.`
  - `@int 1`, `@string "two"` are just `1` and `"two"`
- - a named tag for objects
- - do not nest
+ - do not nest,
  - whitespace between tag name and object is *mandatory*
  - every type has a reserved tag name
- - parsers may reject unknown, or return a wrapped object 
+ - parsers MAY reject unknown, or return a wrapped object 
 
 ### RSON C99 float strings (optional):
 
@@ -91,17 +135,26 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
  - `@float "NaN"` or nan,Inf,inf,+Inf,-Inf,+inf,-inf
  -  no underscores allowed
 
+`<sign>0x<hex mantissa>p<sign><decimal exponent>` or `...1x...` for subnormals.
+
 ### RSON sets (optional):
 
  - `@set [1,2,3]`
  - always a tagged list
- - no duplicate items
+ - no duplicate items, same rules as records
+ - ordering does not matter when comparing
 
 ### RSON dicts (optional):
 
+This is for compatibility with hash tables without insertion order preservation.
+
  - `@dict {"a":1}` 
- - keys must be in lexical order, must round trip in same order.
- - keys must be comparable, hashable, parser MAY reject if not
+ - keys must be emitted in lexical order, must round trip in same order.
+ - keys must all be the same type: number or string 
+ - no duplicate items, same rules as records
+ - a `@dict` is equal to a record if it has same keys, ignoring order.
+
+sort order is only defined for keys of the same type
 
 ### RSON datetimes/periods (optional):
 
@@ -121,11 +174,11 @@ RSON supports encoding types outside of JSON through tagging, like timestamps.
 
 ### RSON complex numbers: (optional)
 
- - `@complex [0,1]`
+ - `@complex [0,1]` (real, imaginary)
 
 ### Builtin RSON Tags:
 
-Pass throughs:
+Pass throughs (i.e `@foo bar` is `bar`):
 
  - `@object` on any 
  - `@bool` on true, or false
@@ -135,24 +188,24 @@ Pass throughs:
  - `@list` on lists
  - `@record` on records
 
-Reserved:
-
- - `unknown`
-
-Transforms:
+Tags that transform the literal:
 
  - @float on strings (for C99 hex floats, including NaN, -Inf, +Inf)
  - @duration on numbers (seconds)
  - @datetime on strings (utc timestamp)
- - @base64 on strings
- - @bytestring on strings 
- - @set on lists
+ - @base64 on strings (into a bytesting)
+ - @bytestring on strings (into a bytestring)
+ - @set on lists 
  - @complex on lists
  - @dict on records
 
+Reserved:
+
+ - `@unknown`
+
 Any other use of a builtin tag is an error and MUST be rejected.
 
-# Appendix: Test Vectors
+# RSON Test Vectors
 
 ## MUST parse
 ```
@@ -184,7 +237,4 @@ _1
 @object @object {}
 "\uD800\uDD01"
 ```
-
-
-
 
