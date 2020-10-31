@@ -81,6 +81,12 @@ As well as optional tags for other types:
  - `@set` for sets, `@complex` for complex numbers
  - `@datetime`, `@duration` for time as point or measurement.
 
+Along with optional tags for fixed-width numerics:
+
+ - Signed integers: `@i8`, `@i16`, `@i32`, `@i64`, `@i128` 
+ - Unsigned integers: `@u8`, `@u16`, `@u32`, `@u64`, `@u128` 
+ - Floating point: `@f8`, `@f16`, `@f32`, `@f64`, `@f128` 
+
 ## RSON strings: 
 
  - use ''s or ""s
@@ -98,7 +104,7 @@ As well as optional tags for other types:
  - floating point: `1.123e-10` `-0.0` `+0.0` 
  - limits on size are implementation defined, parsers MAY reject numbers that are too big to represent.
 
-Special floating point values `NaN`, `+Infinity` are represented using C99 hex literals, `@float "NaN"`
+Special floating point values `NaN`, `+Infinity` are represented using tagged literals, `@float "NaN"`, `@float "+Inf"`, `@float "-Inf"`
 
 ## RSON lists:
 
@@ -111,14 +117,14 @@ Special floating point values `NaN`, `+Infinity` are represented using C99 hex l
  - allow trailing commas
  - implementations MUST support string keys
 
- two keys are the same if
+ Two keys are the same if
 
  - both strings and same codepoints (unnormalized)
  - same numerical value i.e `1` and `1.0` and `1.0e0` are the same key, `+0.0`, `-0.0` are the same key,
  - lists of same size and items are same
- - records of same size and key,values are same, ignoring order
+ - records of same size and key-value pairs are same, ignoring order
  
-semantics of `NaN` keys, or collections containing them are implementation defined.
+Note: Semantics of `NaN` keys, or collections containing them are implementation defined.
 
 ## RSON tagged objects:
 
@@ -176,6 +182,26 @@ sort order is only defined for keys of the same type
 
  - `@complex [0,1]` (real, imaginary)
 
+### RSON fixed width numerics (optional)
+
+Numeric literals can be tagged with a desired width.
+
+ - `@u8 255`
+ - `@i8 -127`
+ - `@f32 0.0`
+
+Additionally, fixed width floating points (i.e `@f8`) work like `@float`, and accept C99 hex-floats, along with `"NaN"` etc.
+
+Implementations MUST error if the floats are too wide, but may choose to store a `f32` in a `f64`, for example.
+
+### RSON numeric arrays (optional)
+
+An array of numeric literals can be tagged:
+
+ - `@u8 [2,5,5]` is the same as `[@u8 2, @u8 5, @u8 5]`
+ - `@i8 [-1,2,7]` is the same as `[@u8 -1, @u8 2, @u8 7]`
+ - `@f32 [0.0, -1.0, 1.0]` is the same as `[@f32 0.0, @f32 -1.0, @f32 1.0]`
+
 ### Builtin RSON Tags:
 
 Pass throughs (i.e `@foo bar` is `bar`):
@@ -198,6 +224,7 @@ Tags that transform the literal:
  - @set on lists 
  - @complex on lists
  - @dict on records
+ - @u8, @f8, @i8 on lists
 
 Reserved:
 
