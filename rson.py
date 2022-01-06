@@ -22,7 +22,6 @@ else:
 
 from datetime import datetime, timedelta, timezone
 
-
 CONTENT_TYPE="application/rson"
 
 reserved_tags = set("""
@@ -202,12 +201,17 @@ class Codec:
                 else:
                     raise ParserErr(
                         buf, pos, "Expected key:value pair but found {}".format(repr(peek)))
-
+                    
                 item, pos = self.parse_rson(buf, pos, transform)
 
                 out[key] = item
 
+                m = whitespace.match(buf, pos)
+                if m:
+                    pos = m.end()
+
                 peek = buf[pos]
+                
                 if peek == ',':
                     pos += 1
                     m = whitespace.match(buf, pos)
@@ -215,7 +219,7 @@ class Codec:
                         pos = m.end()
                 elif peek != '}':
                     raise ParserErr(
-                        buf, pos, "Expecting a ',', or a '{}' but found {}".format('{}',repr(peek)))
+                        buf, pos, "Expecting a ',', or a '}}' but found {}".format('{}',repr(peek)))
             if name not in (None, 'object', 'record', 'dict'):
                 out = self.tagged_to_object(name,  out)
             if transform is not None:
@@ -601,18 +605,18 @@ class Codec:
             buf.write('@{} '.format(name))
             self.dump_rson(value, buf, transform)  # XXX: prevent @foo @foo
 
-if __name__ == '__main__':
-    codec = Codec(None, None)
+codec = Codec(None, None)
 
-    parse = codec.parse
-    dump = codec.dump
+parse = codec.parse
+dump = codec.dump
 
 
+def run_tests(parse, dump):
     def test_parse(buf, obj):
         out = parse(buf)
 
         if (obj != obj and out == out) or (obj == obj and obj != out):
-            raise AssertionError('{} != {}'.format(obj, out))
+            raise AssertionError('{!r} != {!r}'.format(obj, out))
 
 
     def test_dump(obj, buf):
@@ -674,8 +678,8 @@ b"
     test_parse("[]", [])
     test_parse("[1 , 2 , 3 , 4 , 4 ]", [1, 2, 3, 4, 4])
     test_parse("{'a':1,'b':2}", dict(a=1, b=2))
-    test_parse("@set [1,2,3,4]", set([1, 2, 3, 4]))
-    test_parse("{'a':1,'b':2}", dict(a=1, b=2))
+    test_parse("@set [ 1 , 2 , 3 , 4 ]", set([1, 2, 3, 4]))
+    test_parse("{ 'a':1 , 'b':2 }", dict(a=1, b=2))
     test_parse("@complex [1,2]", 1 + 2j)
     test_parse("@bytestring 'foo'", b"foo")
     test_parse("@base64 '{}'".format(
@@ -718,7 +722,7 @@ b"
 
         out = parse(buf1)
 
-        if obj != obj:
+        if obj != obj1:
             if buf0 != buf1 or obj1 == obj1 or out == out:
                 raise AssertionError('{} != {}'.format(obj, out))
         else:
@@ -734,4 +738,6 @@ b"
 
     print('tests passed')
 
+if __name__ == '__main__':
+    run_tests(parse, dump)
 
