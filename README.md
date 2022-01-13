@@ -223,6 +223,7 @@ Tags that transform the literal:
  - @bytestring on strings (into a bytestring)
  - @set on lists 
  - @complex on lists
+ - @string on lists of strings (joins them into one string)
  - @dict on records
  - @u8, @f8, @i8 on lists
 

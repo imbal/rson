@@ -228,7 +228,7 @@ class Codec:
 
         elif peek == '[':
             if name in reserved_tags:
-                if name not in ('object', 'list', 'set', 'complex'):
+                if name not in ('object', 'list', 'set', 'complex', 'string',):
                     raise ParserErr(
                         buf, pos, "{} can't be used on lists".format(name))
 
@@ -273,6 +273,8 @@ class Codec:
                 pass
             elif name == 'complex':
                 out = complex(*out)
+            elif name == 'string':
+                out = "".join(out)
             else:
                 out = self.tagged_to_object(name,  out)
 
