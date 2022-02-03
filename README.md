@@ -33,15 +33,18 @@ Along with some sugar atop JSON, RSON supports tagging literals to represent typ
 
 ## JSON in a nutshell:
 
- - A unicode text file, without a Byte Order Mark
+ - A unicode text file (in utf-8), without a Byte Order Mark
  - Whitespace is `\t`, `\r`, `\n`, `\x20`
  - JSON document is either list, or object
  - Lists are `[]`, `[obj]`, `[ obj, obj ]`, ...
- - Objects: `{ "key": value}`, only string keys
+ - Objects: `{ "key": value}`, only string keys, order not preserved, duplicate handling undefined.
  - Built-ins: `true`, `false`, `null`
- - `"unicode strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, and no control codes unecaped.
- - int/float numbers (unary minus, no leading zeros, except for `0.xxx`)
- - No Comments, No Trailing commas
+ - `"ucs-2 unicode strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, and no control codes unecaped.
+ - floating point numbers (unary minus, no leading zeros, except for `0.xxx`)
+ - No Comments
+ - No Trailing commas in collections
+ - Astral plane characters may need to be escaped using surrogate pairs
+ - Integers may need to be represented as strings if longer than 53 bits
 
 ## RSON in a Nutshell
 
@@ -52,7 +55,7 @@ Along with some sugar atop JSON, RSON supports tagging literals to represent typ
  - Lists are `[]`, `[obj]`, `[obj,]`, `[obj, obj]` ... (trailing comma optional)
  - Records are `{ "key": value}`, keys must be unique, order must be preserved. 
  - Built-ins: `true`, `false`, `null`
- - `"unicode strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF`, no control codes unecaped, and `''` can be used instead of `""`.
+ - `"unicode strings"` with escapes `\" \\ \/ \b \f \n \r \t \uFFFF \UFFFFFFFF`, no control codes unecaped, and `''` can be used instead of `""`.
  - int/float numbers (unary plus or minus, allowleading zeros, hex, octal, and binary integer liters)
  - Tagged literals: `@name [1,2,3]` for any other type of value.
 
